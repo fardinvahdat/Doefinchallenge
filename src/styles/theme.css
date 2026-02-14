@@ -1,0 +1,523 @@
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  --font-size: 16px;
+  --background: #0A0A0A;
+  --foreground: #F8F8F8;
+  --surface: #121212;
+  --elevated: #1A1A1A;
+  --border: #222222;
+  --primary: #A855F7;
+  --primary-foreground: #0A0A0A;
+  --accent: #22D3EE;
+  --accent-foreground: #0A0A0A;
+  --success: #22C55E;
+  --danger: #EF4444;
+  --text-primary: #F8F8F8;
+  --text-secondary: #A3A3A3;
+  --text-tertiary: #666666;
+  --card: #121212;
+  --card-foreground: #F8F8F8;
+  --popover: #1A1A1A;
+  --popover-foreground: #F8F8F8;
+  --secondary: #1A1A1A;
+  --secondary-foreground: #F8F8F8;
+  --muted: #1A1A1A;
+  --muted-foreground: #A3A3A3;
+  --destructive: #EF4444;
+  --destructive-foreground: #F8F8F8;
+  --input: #121212;
+  --ring: #A855F7;
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.396 0.141 25.723);
+  --destructive-foreground: oklch(0.637 0.237 25.331);
+  --border: oklch(0.269 0 0);
+  --input: oklch(0.269 0 0);
+  --ring: oklch(0.439 0 0);
+  --font-weight-medium: 500;
+  --font-weight-normal: 400;
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.269 0 0);
+  --sidebar-ring: oklch(0.439 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /**
+  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
+  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
+  */
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  h1 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h2 {
+    font-size: var(--text-xl);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h3 {
+    font-size: var(--text-lg);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  h4 {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  label {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  button {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-medium);
+    line-height: 1.5;
+  }
+
+  input {
+    font-size: var(--text-base);
+    font-weight: var(--font-weight-normal);
+    line-height: 1.5;
+  }
+}
+
+/* RainbowKit Custom Styling */
+@layer base {
+  /* ========================================
+     DOEFIN V2 RAINBOWKIT THEME
+     Cyber-Neon Dark Institutional Design
+     ======================================== */
+  
+  /* Modal Container - Main backdrop */
+  [data-rk] > div > div {
+    background: rgba(10, 10, 10, 0.95) !important;
+    backdrop-filter: blur(12px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+  }
+
+  /* Modal Content Box */
+  [data-rk] [role="dialog"] {
+    background: #0A0A0A !important;
+    border: 1px solid #222222 !important;
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.1),
+      0 8px 32px rgba(0, 0, 0, 0.8),
+      0 0 64px rgba(168, 85, 247, 0.15) !important;
+    border-radius: 12px !important;
+    padding: 0 !important;
+  }
+
+  /* Modal Header */
+  [data-rk] [role="dialog"] > div:first-child {
+    background: linear-gradient(180deg, #121212 0%, #0A0A0A 100%) !important;
+    border-bottom: 1px solid #222222 !important;
+    padding: 24px !important;
+  }
+
+  /* Modal Title */
+  [data-rk] [role="dialog"] h1,
+  [data-rk] [role="dialog"] h2 {
+    color: #F8F8F8 !important;
+    font-size: 18px !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.02em !important;
+    margin: 0 !important;
+  }
+
+  /* Close Button */
+  [data-rk] button[aria-label*="Close"] {
+    background: #1A1A1A !important;
+    border: 1px solid #222222 !important;
+    border-radius: 6px !important;
+    width: 32px !important;
+    height: 32px !important;
+    transition: all 0.2s ease !important;
+    color: #A3A3A3 !important;
+  }
+
+  [data-rk] button[aria-label*="Close"]:hover {
+    background: #222222 !important;
+    border-color: #A855F7 !important;
+    color: #A855F7 !important;
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.3) !important;
+  }
+
+  /* Modal Body */
+  [data-rk] [role="dialog"] > div:nth-child(2) {
+    background: #0A0A0A !important;
+    padding: 24px !important;
+  }
+
+  /* Wallet Option Buttons */
+  [data-rk] button[type="button"]:not([aria-label*="Close"]) {
+    background: linear-gradient(180deg, #121212 0%, #0D0D0D 100%) !important;
+    border: 1px solid #222222 !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin: 0 0 12px 0 !important;
+    transition: all 0.2s ease !important;
+    min-height: 64px !important;
+  }
+
+  [data-rk] button[type="button"]:not([aria-label*="Close"]):hover {
+    background: linear-gradient(180deg, #1A1A1A 0%, #121212 100%) !important;
+    border-color: #A855F7 !important;
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.3),
+      0 0 24px rgba(168, 85, 247, 0.2),
+      0 4px 12px rgba(0, 0, 0, 0.4) !important;
+    transform: translateY(-1px) !important;
+  }
+
+  [data-rk] button[type="button"]:not([aria-label*="Close"]):active {
+    transform: translateY(0) !important;
+  }
+
+  /* Wallet Button - Selected/Recent */
+  [data-rk] button[type="button"][data-recent="true"] {
+    border-color: #A855F7 !important;
+    background: linear-gradient(180deg, #1A1A1A 0%, #121212 100%) !important;
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.3),
+      0 0 20px rgba(168, 85, 247, 0.15) !important;
+  }
+
+  /* Wallet Name Text */
+  [data-rk] button[type="button"] span {
+    color: #F8F8F8 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+  }
+
+  /* "Recent" badge */
+  [data-rk] [data-rk] > div > div > span {
+    background: rgba(168, 85, 247, 0.2) !important;
+    color: #A855F7 !important;
+    border: 1px solid rgba(168, 85, 247, 0.3) !important;
+    border-radius: 4px !important;
+    padding: 2px 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  /* Wallet Icons */
+  [data-rk] button[type="button"] img {
+    border-radius: 8px !important;
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  /* "Get" Button for wallet installation */
+  [data-rk] a[href*="metamask"],
+  [data-rk] a[href*="rainbow"],
+  [data-rk] a[href*="coinbase"] {
+    background: rgba(34, 211, 238, 0.1) !important;
+    border: 1px solid rgba(34, 211, 238, 0.3) !important;
+    color: #22D3EE !important;
+    border-radius: 6px !important;
+    padding: 6px 12px !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  [data-rk] a[href*="metamask"]:hover,
+  [data-rk] a[href*="rainbow"]:hover,
+  [data-rk] a[href*="coinbase"]:hover {
+    background: rgba(34, 211, 238, 0.2) !important;
+    border-color: #22D3EE !important;
+    box-shadow: 0 0 16px rgba(34, 211, 238, 0.3) !important;
+  }
+
+  /* Connecting State */
+  [data-rk] [role="dialog"] > div > div > div[style*="height"] {
+    background: #0A0A0A !important;
+  }
+
+  /* Connecting Spinner */
+  [data-rk] [role="dialog"] svg[viewBox="0 0 48 48"] {
+    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5)) !important;
+  }
+
+  /* Connecting Text */
+  [data-rk] [role="dialog"] > div > div > div > div > div {
+    color: #F8F8F8 !important;
+    font-size: 14px !important;
+  }
+
+  /* QR Code Container */
+  [data-rk] [role="dialog"] > div > div > div > div > svg {
+    border: 8px solid #121212 !important;
+    border-radius: 16px !important;
+    padding: 16px !important;
+    background: #FFFFFF !important;
+  }
+
+  /* QR Code Wrapper */
+  [data-rk] > div > div > div > div[style*="border-radius"] {
+    background: #121212 !important;
+    border: 1px solid #222222 !important;
+    border-radius: 20px !important;
+    padding: 16px !important;
+    box-shadow: 
+      0 0 0 1px rgba(168, 85, 247, 0.1),
+      0 0 32px rgba(168, 85, 247, 0.1) !important;
+  }
+
+  /* Account Modal - Connected State */
+  [data-rk] [role="dialog"][aria-label*="Account"] {
+    background: #0A0A0A !important;
+  }
+
+  /* Account Address Display */
+  [data-rk] [role="dialog"] button[aria-label*="Copy"] {
+    background: #121212 !important;
+    border: 1px solid #222222 !important;
+    border-radius: 8px !important;
+    padding: 12px 16px !important;
+    font-family: 'Monaco', 'Courier New', monospace !important;
+    font-size: 14px !important;
+    color: #F8F8F8 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  [data-rk] [role="dialog"] button[aria-label*="Copy"]:hover {
+    border-color: #A855F7 !important;
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.2) !important;
+  }
+
+  /* Balance Display */
+  [data-rk] [role="dialog"] > div > div > div:nth-child(2) {
+    color: #A3A3A3 !important;
+    font-size: 13px !important;
+  }
+
+  /* Action Buttons in Account Modal */
+  [data-rk] [role="dialog"] > div:last-child button {
+    background: #121212 !important;
+    border: 1px solid #222222 !important;
+    border-radius: 8px !important;
+    padding: 12px 20px !important;
+    color: #F8F8F8 !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    transition: all 0.2s ease !important;
+  }
+
+  [data-rk] [role="dialog"] > div:last-child button:hover {
+    background: #1A1A1A !important;
+    border-color: #A855F7 !important;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2) !important;
+  }
+
+  /* Disconnect Button - Danger Style */
+  [data-rk] button[aria-label*="Disconnect"],
+  [data-rk] button:has(svg[viewBox="0 0 15 15"]) {
+    background: rgba(239, 68, 68, 0.1) !important;
+    border-color: rgba(239, 68, 68, 0.3) !important;
+    color: #EF4444 !important;
+  }
+
+  [data-rk] button[aria-label*="Disconnect"]:hover,
+  [data-rk] button:has(svg[viewBox="0 0 15 15"]):hover {
+    background: rgba(239, 68, 68, 0.2) !important;
+    border-color: #EF4444 !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2) !important;
+  }
+
+  /* Chain/Network Selector */
+  [data-rk] [role="dialog"][aria-label*="Chain"] button {
+    background: #121212 !important;
+    border: 1px solid #222222 !important;
+    border-radius: 8px !important;
+    padding: 16px !important;
+    margin-bottom: 8px !important;
+  }
+
+  [data-rk] [role="dialog"][aria-label*="Chain"] button:hover {
+    background: #1A1A1A !important;
+    border-color: #A855F7 !important;
+    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2) !important;
+  }
+
+  /* Chain Icon */
+  [data-rk] [role="dialog"] img[alt*="chain"] {
+    border-radius: 50% !important;
+    border: 2px solid #222222 !important;
+  }
+
+  /* Loading States */
+  [data-rk] [role="dialog"] [data-testid="loader"] {
+    border-color: rgba(168, 85, 247, 0.2) !important;
+    border-top-color: #A855F7 !important;
+  }
+
+  /* Text Elements */
+  [data-rk] span,
+  [data-rk] div {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+  }
+
+  /* Secondary Text */
+  [data-rk] [role="dialog"] > div > div > div:not(:first-child) {
+    color: #A3A3A3 !important;
+  }
+
+  /* Links */
+  [data-rk] a {
+    color: #22D3EE !important;
+    text-decoration: none !important;
+  }
+
+  [data-rk] a:hover {
+    color: #67E8F9 !important;
+    text-decoration: underline !important;
+  }
+
+  /* Scrollbar for wallet list */
+  [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar {
+    width: 8px !important;
+  }
+
+  [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-track {
+    background: #0A0A0A !important;
+    border-radius: 4px !important;
+  }
+
+  [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-thumb {
+    background: #222222 !important;
+    border-radius: 4px !important;
+  }
+
+  [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-thumb:hover {
+    background: #333333 !important;
+  }
+
+  /* Mobile Responsive */
+  @media (max-width: 768px) {
+    [data-rk] [role="dialog"] {
+      margin: 16px !important;
+      max-width: calc(100vw - 32px) !important;
+    }
+
+    [data-rk] [role="dialog"] > div:first-child,
+    [data-rk] [role="dialog"] > div:nth-child(2) {
+      padding: 16px !important;
+    }
+
+    [data-rk] button[type="button"]:not([aria-label*="Close"]) {
+      padding: 12px !important;
+      min-height: 56px !important;
+    }
+  }
+
+  /* Animations */
+  [data-rk] [role="dialog"] {
+    animation: slideUp 0.3s ease-out !important;
+  }
+
+  @keyframes slideUp {
+    from {
+      opacity: 0;
+      transform: translateY(20px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* Focus States */
+  [data-rk] button:focus-visible {
+    outline: 2px solid #A855F7 !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Disabled States */
+  [data-rk] button:disabled {
+    opacity: 0.5 !important;
+    cursor: not-allowed !important;
+  }
+}
