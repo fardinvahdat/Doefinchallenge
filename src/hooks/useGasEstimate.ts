@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { usePublicClient, useAccount } from 'wagmi';
-import { Address, parseEther, formatEther, formatGwei, decodeErrorResult, keccak256, encodePacked } from 'viem';
-import { CONTRACTS, CONDITIONAL_TOKENS_ABI } from '../config/contracts';
+import { Address, parseEther, formatEther, keccak256, encodePacked, encodeAbiParameters, decodeErrorResult } from 'viem';
+import { CONTRACTS, DIAMOND_ABI, CONDITIONAL_TOKENS_ABI } from '../config/contracts';
 
 export interface GasEstimate {
   estimatedGas: bigint;
@@ -14,19 +14,29 @@ export interface GasEstimate {
   conditionExists?: boolean;
 }
 
-interface UseGasEstimateProps {
+// Legacy interface for ConditionalTokens contract
+interface UseGasEstimateLegacyProps {
   enabled: boolean;
   oracle?: Address;
   questionId?: `0x${string}`;
   outcomeSlotCount?: bigint;
 }
 
-export function useGasEstimate({
-  enabled,
-  oracle,
-  questionId,
-  outcomeSlotCount,
-}: UseGasEstimateProps): GasEstimate {
+// New interface for Diamond contract (createConditionWithMetadata)
+interface UseGasEstimateDiamondProps {
+  enabled: boolean;
+  diamond?: Address;
+  questionType?: number;
+  threshold?: bigint;
+  blockHeight?: bigint;
+  outcomeSlotCount?: bigint;
+  metadataURI?: string;
+  salt?: `0x${string}`;
+}
+
+type UseGasEstimateProps = UseGasEstimateLegacyProps | UseGasEstimateDiamondProps;
+
+export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
   const publicClient = usePublicClient();
   const { address } = useAccount();
 
@@ -39,11 +49,15 @@ export function useGasEstimate({
   // Rough ETH/USD rate (you can fetch this from an API)
   const ETH_USD_RATE = 2000;
 
+  // Determine if using Diamond contract or legacy ConditionalTokens
+  const isDiamond = 'diamond' in props && props.diamond !== undefined;
+
   useEffect(() => {
     let mounted = true;
 
     async function estimateGas() {
-      if (!enabled || !publicClient || !address || !oracle || !questionId || !outcomeSlotCount) {
+      // Check if we have required params
+      if (!props.enabled || !publicClient || !address) {
         return;
       }
 
@@ -52,77 +66,188 @@ export function useGasEstimate({
       setConditionExists(false);
 
       try {
-        // Calculate condition ID (same as generateConditionId in useConditionalTokens)
-        const conditionId = keccak256(
-          encodePacked(
-            ['address', 'bytes32', 'uint256'],
-            [oracle, questionId, outcomeSlotCount]
-          )
-        );
+        if (isDiamond) {
+          // Diamond contract (createConditionWithMetadata) estimation
+          const diamondProps = props as UseGasEstimateDiamondProps;
+          const { diamond, questionType, threshold, blockHeight, outcomeSlotCount, metadataURI, salt } = diamondProps;
 
-        console.log('⛽ DEBUG: Gas Estimation Starting');
-        console.log('  Oracle (wallet):', oracle);
-        console.log('  QuestionId:', questionId);
-        console.log('  OutcomeSlotCount:', outcomeSlotCount.toString());
-        console.log('  Calculated ConditionId:', conditionId);
-
-        // Check if condition is already prepared by checking outcomeSlotCount
-        const outcomeSlotsCount = await publicClient.readContract({
-          address: CONTRACTS.ConditionalTokens,
-          abi: CONDITIONAL_TOKENS_ABI,
-          functionName: 'getOutcomeSlotCount',
-          args: [conditionId],
-        }) as bigint;
-
-        console.log('  Contract OutcomeSlotCount:', outcomeSlotsCount.toString());
-
-        if (outcomeSlotsCount > 0n) {
-          // Condition already exists!
-          console.log('  ❌ CONDITION EXISTS!');
-          if (mounted) {
-            setConditionExists(true);
-            setError('This condition already exists. Try different threshold or block height values.');
-            setIsEstimating(false);
-            
-            // Still get gas price for display
-            try {
-              const currentGasPrice = await publicClient.getGasPrice();
-              setGasPrice(currentGasPrice);
-            } catch {
-              setGasPrice(parseEther('0.000000001'));
-            }
+          if (!diamond || questionType === undefined || !threshold || !blockHeight || !outcomeSlotCount || !salt) {
+            return;
           }
-          return;
-        }
 
-        console.log('  ✅ Condition does not exist, proceeding with estimation...');
-        
-        // Condition doesn't exist, proceed with estimation
-        // First, simulate the contract call to check if it would succeed
-        const { request } = await publicClient.simulateContract({
-          address: CONTRACTS.ConditionalTokens,
-          abi: CONDITIONAL_TOKENS_ABI,
-          functionName: 'prepareCondition',
-          args: [oracle, questionId, outcomeSlotCount],
-          account: address,
-        });
+          console.log('⛽ DEBUG: Diamond Gas Estimation Starting');
+          console.log('  Diamond:', diamond);
+          console.log('  QuestionType:', questionType);
+          console.log('  Threshold:', threshold.toString());
+          console.log('  BlockHeight:', blockHeight.toString());
+          console.log('  OutcomeSlotCount:', outcomeSlotCount.toString());
+          console.log('  MetadataURI:', metadataURI);
+          console.log('  Salt:', salt);
 
-        // If simulation succeeds, estimate gas
-        const gas = await publicClient.estimateGas({
-          to: CONTRACTS.ConditionalTokens,
-          data: request.data,
-          account: address,
-        });
+          // Encode metadata using ABI encoding
+          const metadata = encodeAbiParameters(
+            [{ type: "uint256" }, { type: "uint256" }],
+            [threshold, blockHeight]
+          );
 
-        // Get current gas price
-        const currentGasPrice = await publicClient.getGasPrice();
+          // Generate questionId from metadata (same as in CreateCondition)
+          const questionId = keccak256(metadata);
+          console.log('  QuestionId:', questionId);
 
-        if (mounted) {
-          // Add 20% buffer to gas estimate for safety
-          const gasWithBuffer = (gas * 120n) / 100n;
-          setEstimatedGas(gasWithBuffer);
-          setGasPrice(currentGasPrice);
-          setIsEstimating(false);
+          // Calculate condition ID
+          const conditionId = keccak256(
+            encodePacked(
+              ['address', 'bytes32', 'uint8', 'bytes32'],
+              [address, questionId, outcomeSlotCount, salt]
+            )
+          );
+          console.log('  Calculated ConditionId:', conditionId);
+
+          // Check if condition already exists via Diamond contract
+          try {
+            const existingCondition = await publicClient.readContract({
+              address: CONTRACTS.Diamond,
+              abi: DIAMOND_ABI,
+              functionName: 'getCondition',
+              args: [conditionId],
+            }) as any;
+
+            if (existingCondition && existingCondition.oracle !== '0x0000000000000000000000000000000000000000') {
+              console.log('  ❌ CONDITION EXISTS!');
+              if (mounted) {
+                setConditionExists(true);
+                setError('This condition already exists. Try different threshold or block height values.');
+                setIsEstimating(false);
+                
+                try {
+                  const currentGasPrice = await publicClient.getGasPrice();
+                  setGasPrice(currentGasPrice);
+                } catch {
+                  setGasPrice(parseEther('0.000000001'));
+                }
+              }
+              return;
+            }
+          } catch (e) {
+            // Condition doesn't exist (will throw if not found)
+            console.log('  ✅ Condition does not exist, proceeding...');
+          }
+          
+          console.log('  ✅ Condition does not exist, proceeding with estimation...');
+          
+          // Simulate the contract call
+          const { request } = await publicClient.simulateContract({
+            address: CONTRACTS.Diamond,
+            abi: DIAMOND_ABI,
+            functionName: 'createConditionWithMetadata',
+            args: [
+              questionType, // uint8
+              metadata, // bytes
+              Number(outcomeSlotCount), // uint8
+              metadataURI || '', // string
+              salt, // bytes32
+            ],
+            account: address,
+          });
+
+          // If simulation succeeds, estimate gas
+          const gas = await publicClient.estimateGas({
+            to: CONTRACTS.Diamond,
+            data: request.data,
+            account: address,
+          });
+
+          // Get current gas price
+          const currentGasPrice = await publicClient.getGasPrice();
+
+          if (mounted) {
+            // Add 20% buffer to gas estimate for safety
+            const gasWithBuffer = gas;
+            setEstimatedGas(gasWithBuffer);
+            setGasPrice(currentGasPrice);
+            setIsEstimating(false);
+          }
+        } else {
+          // Legacy ConditionalTokens contract estimation
+          const legacyProps = props as UseGasEstimateLegacyProps;
+          const { oracle, questionId, outcomeSlotCount } = legacyProps;
+
+          if (!oracle || !questionId || !outcomeSlotCount) {
+            return;
+          }
+
+          // Calculate condition ID (same as generateConditionId in useConditionalTokens)
+          const conditionId = keccak256(
+            encodePacked(
+              ['address', 'bytes32', 'uint256'],
+              [oracle, questionId, outcomeSlotCount]
+            )
+          );
+
+          console.log('⛽ DEBUG: Legacy Gas Estimation Starting');
+          console.log('  Oracle (wallet):', oracle);
+          console.log('  QuestionId:', questionId);
+          console.log('  OutcomeSlotCount:', outcomeSlotCount.toString());
+          console.log('  Calculated ConditionId:', conditionId);
+
+          // Check if condition is already prepared by checking outcomeSlotCount
+          const outcomeSlotsCount = await publicClient.readContract({
+            address: CONTRACTS.ConditionalTokens,
+            abi: CONDITIONAL_TOKENS_ABI,
+            functionName: 'getOutcomeSlotCount',
+            args: [conditionId],
+          }) as bigint;
+
+          console.log('  Contract OutcomeSlotCount:', outcomeSlotsCount.toString());
+
+          if (outcomeSlotsCount > 0n) {
+            // Condition already exists!
+            console.log('  ❌ CONDITION EXISTS!');
+            if (mounted) {
+              setConditionExists(true);
+              setError('This condition already exists. Try different threshold or block height values.');
+              setIsEstimating(false);
+              
+              // Still get gas price for display
+              try {
+                const currentGasPrice = await publicClient.getGasPrice();
+                setGasPrice(currentGasPrice);
+              } catch {
+                setGasPrice(parseEther('0.000000001'));
+              }
+            }
+            return;
+          }
+
+          console.log('  ✅ Condition does not exist, proceeding with estimation...');
+          
+          // Condition doesn't exist, proceed with estimation
+          // First, simulate the contract call to check if it would succeed
+          const { request } = await publicClient.simulateContract({
+            address: CONTRACTS.ConditionalTokens,
+            abi: CONDITIONAL_TOKENS_ABI,
+            functionName: 'prepareCondition',
+            args: [oracle, questionId, outcomeSlotCount],
+            account: address,
+          });
+
+          // If simulation succeeds, estimate gas
+          const gas = await publicClient.estimateGas({
+            to: CONTRACTS.ConditionalTokens,
+            data: request.data,
+            account: address,
+          });
+
+          // Get current gas price
+          const currentGasPrice = await publicClient.getGasPrice();
+
+          if (mounted) {
+            // Add 20% buffer to gas estimate for safety
+            const gasWithBuffer = gas;
+            setEstimatedGas(gasWithBuffer);
+            setGasPrice(currentGasPrice);
+            setIsEstimating(false);
+          }
         }
       } catch (err: any) {
         console.error('Gas estimation error:', err);
@@ -135,12 +260,21 @@ export function useGasEstimate({
           if (err.data) {
             try {
               const decodedError = decodeErrorResult({
-                abi: CONDITIONAL_TOKENS_ABI,
+                abi: DIAMOND_ABI,
                 data: err.data,
               });
               errorMessage = `Contract Error: ${decodedError.errorName || 'Unknown'}`;
             } catch {
-              // Couldn't decode, use generic message
+              // Couldn't decode, try ConditionalTokens ABI
+              try {
+                const decodedError = decodeErrorResult({
+                  abi: CONDITIONAL_TOKENS_ABI,
+                  data: err.data,
+                });
+                errorMessage = `Contract Error: ${decodedError.errorName || 'Unknown'}`;
+              } catch {
+                // Couldn't decode at all
+              }
             }
           }
           
@@ -162,7 +296,7 @@ export function useGasEstimate({
           setIsEstimating(false);
           
           // Set conservative fallback estimates
-          setEstimatedGas(200000n); // ~200k gas fallback
+          setEstimatedGas(300000n); // ~300k gas fallback for Diamond contract
           
           // Get gas price even if estimation fails
           try {
@@ -180,10 +314,15 @@ export function useGasEstimate({
     return () => {
       mounted = false;
     };
-  }, [enabled, publicClient, address, oracle, questionId, outcomeSlotCount]);
+  }, [props.enabled, publicClient, address, isDiamond, 
+    // Include all possible dependencies
+    isDiamond ? (props as UseGasEstimateDiamondProps).diamond : (props as UseGasEstimateLegacyProps).oracle,
+    isDiamond ? (props as UseGasEstimateDiamondProps).questionType : (props as UseGasEstimateLegacyProps).questionId,
+    isDiamond ? (props as UseGasEstimateDiamondProps).threshold : (props as UseGasEstimateLegacyProps).outcomeSlotCount
+  ]);
 
   // Calculate costs
-  const estimatedCostWei = estimatedGas * gasPrice;
+  const estimatedCostWei: bigint = estimatedGas * gasPrice;
   const estimatedCostEth = formatEther(estimatedCostWei);
   const estimatedCostUSD = (parseFloat(estimatedCostEth) * ETH_USD_RATE).toFixed(2);
 

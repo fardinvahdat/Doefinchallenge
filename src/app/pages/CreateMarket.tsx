@@ -1,5 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { Loader2, Check, ExternalLink } from "lucide-react";
@@ -13,12 +20,88 @@ import {
 } from "../components/ui/dialog";
 import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
-import { useAccount, useBalance } from "wagmi";
-import { useConditionalTokens } from "../../hooks/useConditionalTokens";
+import {
+  useAccount,
+  useChainId,
+  useReadContract,
+  usePublicClient,
+} from "wagmi";
+import {
+  useSplitPosition,
+  parseSplitPositionReceipt,
+} from "../../hooks/useSplitPosition";
 import { useTokenApproval } from "../../hooks/useTokenApproval";
 import { useHistoricalEvents } from "../../hooks/useContractEvents";
-import { CONTRACTS } from "../../config/contracts";
+import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
+
+// Interface for markets stored in localStorage
+interface StoredMarket {
+  conditionId: string;
+  yesPositionId: string;
+  noPositionId: string;
+  collateralToken: string;
+  amount: string;
+  transactionHash: string;
+  timestamp: number;
+}
+
+// LocalStorage key for markets
+const MARKETS_STORAGE_KEY = "doefin-markets";
+
+// Function to load markets from localStorage
+function loadMarketsFromStorage(): StoredMarket[] {
+  try {
+    const storedData = localStorage.getItem(MARKETS_STORAGE_KEY);
+    if (storedData) {
+      return JSON.parse(storedData) as StoredMarket[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading markets from localStorage:", error);
+    return [];
+  }
+}
+
+// Function to save a market to localStorage
+function saveMarketToStorage(market: StoredMarket): void {
+  try {
+    const markets = loadMarketsFromStorage();
+    markets.push(market);
+    localStorage.setItem(MARKETS_STORAGE_KEY, JSON.stringify(markets));
+  } catch (error) {
+    console.error("Error saving market to localStorage:", error);
+  }
+}
+
+// Interface for conditions stored in localStorage
+interface StoredCondition {
+  conditionId: string;
+  transactionHash: string;
+  question: string;
+  threshold: string;
+  blockHeight: string;
+  outcomeSlotCount: number;
+  timestamp: number;
+  metadataURI?: string;
+}
+
+// LocalStorage key for conditions
+const CONDITIONS_STORAGE_KEY = "doefin-conditions";
+
+// Function to load conditions from localStorage
+function loadConditionsFromStorage(): StoredCondition[] {
+  try {
+    const storedData = localStorage.getItem(CONDITIONS_STORAGE_KEY);
+    if (storedData) {
+      return JSON.parse(storedData) as StoredCondition[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading conditions from localStorage:", error);
+    return [];
+  }
+}
 
 interface Condition {
   conditionId: `0x${string}`;
@@ -32,6 +115,7 @@ interface Collateral {
   symbol: string;
   name: string;
   address: Address;
+  decimals: number;
 }
 
 const collaterals: Collateral[] = [
@@ -39,41 +123,81 @@ const collaterals: Collateral[] = [
     symbol: "mBTC",
     name: "Mock Bitcoin",
     address: CONTRACTS.mBTC,
+    decimals: 8,
   },
   {
     symbol: "mUSDC",
     name: "Mock USDC",
     address: CONTRACTS.mUSDC,
+    decimals: 6,
   },
 ];
 
 export default function CreateMarket() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
+  const currentChain = useChainId();
   const { events, isLoading: eventsLoading } = useHistoricalEvents();
 
-  const [selectedCondition, setSelectedCondition] = useState<Condition | null>(null);
-  const [selectedCollateral, setSelectedCollateral] = useState<Collateral | null>(null);
+  // State for markets from localStorage
+  const [storedMarkets, setStoredMarkets] = useState<StoredMarket[]>([]);
+  const [isLoadingStoredMarkets, setIsLoadingStoredMarkets] = useState(true);
+
+  // State for conditions from localStorage
+  const [storedConditions, setStoredConditions] = useState<StoredCondition[]>(
+    [],
+  );
+  const [isLoadingStoredConditions, setIsLoadingStoredConditions] =
+    useState(true);
+
+  const [selectedCondition, setSelectedCondition] = useState<Condition | null>(
+    null,
+  );
+  const [selectedCollateral, setSelectedCollateral] =
+    useState<Collateral | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Get conditions from blockchain events
-  const conditions: Condition[] = events
-    .filter((e) => e.type === 'ConditionPreparation')
-    .map((e) => ({
-      conditionId: e.args.conditionId as `0x${string}`,
-      questionId: e.args.questionId as `0x${string}`,
-      question: `Condition ${(e.args.conditionId as string).slice(0, 10)}...`,
-      threshold: "Unknown",
-      blockHeight: e.blockNumber.toString(),
-    }))
-    .slice(0, 5);
+  // Load conditions and markets from localStorage on component mount
+  useEffect(() => {
+    const conditions = loadConditionsFromStorage();
+    setStoredConditions(conditions);
+    setIsLoadingStoredConditions(false);
 
-  // Get collateral balance
-  const { data: collateralBalance } = useBalance({
-    address,
-    token: selectedCollateral?.address,
+    const markets = loadMarketsFromStorage();
+    setStoredMarkets(markets);
+    setIsLoadingStoredMarkets(false);
+  }, []);
+
+  // Get conditions from localStorage (now the primary source)
+  // Convert StoredCondition to Condition format for compatibility
+  const conditions: Condition[] = storedConditions.map((sc) => ({
+    conditionId: sc.conditionId as `0x${string}`,
+    questionId: "" as `0x${string}`,
+    question: sc.question,
+    threshold: sc.threshold,
+    blockHeight: sc.blockHeight,
+  }));
+
+  // Get collateral balance using ERC20 balanceOf
+  const { data: collateralBalanceRaw } = useReadContract({
+    address: selectedCollateral?.address,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: address ? [address] : undefined,
+    query: {
+      enabled: !!address && !!selectedCollateral,
+    },
   });
+
+  // Format balance using collateral's decimals
+  const collateralBalance =
+    collateralBalanceRaw !== undefined
+      ? {
+          value: collateralBalanceRaw,
+          decimals: selectedCollateral?.decimals ?? 18,
+        }
+      : null;
 
   // Token approval hook
   const {
@@ -86,8 +210,11 @@ export default function CreateMarket() {
   } = useTokenApproval(
     selectedCollateral?.address || CONTRACTS.mBTC,
     CONTRACTS.ConditionalTokens,
-    address
+    address,
   );
+
+  // Get public client for reading contract data
+  const publicClient = usePublicClient();
 
   // Split position hook
   const {
@@ -97,7 +224,8 @@ export default function CreateMarket() {
     isConfirming: isSplitConfirming,
     isSuccess: isSplitSuccess,
     error: splitError,
-  } = useConditionalTokens();
+    receipt,
+  } = useSplitPosition();
 
   // Handle approve success
   useEffect(() => {
@@ -109,11 +237,69 @@ export default function CreateMarket() {
 
   // Handle split success
   useEffect(() => {
-    if (isSplitSuccess) {
-      setShowSuccessModal(true);
-      toast.success("Position split successfully!");
+    if (isSplitSuccess && receipt && selectedCondition && selectedCollateral) {
+      // Parse the receipt to get position IDs
+      parseSplitPositionReceipt(
+        receipt,
+        CONTRACTS.Diamond,
+        selectedCollateral.address,
+        selectedCondition.conditionId,
+        publicClient as unknown as {
+          readContract: (params: {
+            address: Address;
+            abi: readonly any[];
+            functionName: string;
+            args: any[];
+          }) => Promise<any>;
+        },
+      )
+        .then((result) => {
+          // Save market to localStorage
+          const newMarket: StoredMarket = {
+            conditionId: result.conditionId,
+            yesPositionId: result.yesPositionId.toString(),
+            noPositionId: result.noPositionId.toString(),
+            collateralToken: selectedCollateral.address,
+            amount: amount,
+            transactionHash: receipt.transactionHash,
+            timestamp: Date.now(),
+          };
+          saveMarketToStorage(newMarket);
+          setStoredMarkets((prev) => [...prev, newMarket]);
+
+          toast.success(
+            `Position split successfully! YES: ${result.yesPositionId.toString().slice(0, 10)}... NO: ${result.noPositionId.toString().slice(0, 10)}...`,
+          );
+          // Show success modal instead of navigating
+          setShowSuccessModal(true);
+        })
+        .catch((err) => {
+          console.error("Error parsing receipt:", err);
+          // Still save basic market data on error but without position IDs
+          const newMarket: StoredMarket = {
+            conditionId: selectedCondition.conditionId,
+            yesPositionId: "",
+            noPositionId: "",
+            collateralToken: selectedCollateral.address,
+            amount: amount,
+            transactionHash: receipt.transactionHash,
+            timestamp: Date.now(),
+          };
+          saveMarketToStorage(newMarket);
+          setStoredMarkets((prev) => [...prev, newMarket]);
+          toast.success("Position split successfully!");
+          // Show success modal instead of navigating
+          setShowSuccessModal(true);
+        });
     }
-  }, [isSplitSuccess]);
+  }, [
+    isSplitSuccess,
+    receipt,
+    selectedCondition,
+    selectedCollateral,
+    amount,
+    publicClient,
+  ]);
 
   // Handle errors
   useEffect(() => {
@@ -132,7 +318,12 @@ export default function CreateMarket() {
   };
 
   const handleSplitPosition = async () => {
-    if (!selectedCondition || !selectedCollateral || !amount || !collateralBalance) {
+    if (
+      !selectedCondition ||
+      !selectedCollateral ||
+      !amount ||
+      !collateralBalance
+    ) {
       toast.error("Please complete all fields");
       return;
     }
@@ -142,37 +333,51 @@ export default function CreateMarket() {
       return;
     }
 
-    try {
-      const amountWei = parseUnits(amount, collateralBalance.decimals);
-      const partition = [1n, 2n]; // Binary partition for YES/NO
+    const amountWei = parseUnits(
+      amount,
+      selectedCollateral.decimals,
+    ).toString();
+    if (collateralBalance.value < +amountWei) {
+      toast.error("Insufficient collateral balance");
+      return;
+    }
 
-      await splitPosition(
-        selectedCollateral.address,
-        "0x0000000000000000000000000000000000000000000000000000000000000000", // No parent collection
-        selectedCondition.conditionId,
-        partition,
-        amountWei
-      );
+    try {
+      await splitPosition({
+        collateralToken: selectedCollateral.address,
+        conditionId: selectedCondition.conditionId,
+        amount: amountWei,
+      });
     } catch (err) {
       console.error("Error splitting position:", err);
+      toast.error(
+        `Transaction failed: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
     }
   };
 
   const setMaxAmount = () => {
     if (collateralBalance) {
-      setAmount(formatUnits(collateralBalance.value, collateralBalance.decimals));
+      setAmount(
+        formatUnits(collateralBalance.value, collateralBalance.decimals),
+      );
     }
   };
 
-  const txStatus = (isApproving || isApprovingConfirming)
-    ? "awaiting"
-    : (isSplitting || isSplitConfirming)
-    ? "confirming"
-    : isSplitSuccess
-    ? "confirmed"
-    : splitError
-    ? "failed"
-    : "idle";
+  const txStatus = useMemo(() => {
+    if (isApproving || isApprovingConfirming) return "awaiting";
+    if (isSplitting || isSplitConfirming) return "confirming";
+    if (isSplitSuccess) return "confirmed";
+    if (splitError) return "failed";
+    return "pending";
+  }, [
+    isApproving,
+    isApprovingConfirming,
+    isSplitting,
+    isSplitConfirming,
+    isSplitSuccess,
+    splitError,
+  ]);
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
@@ -205,47 +410,77 @@ export default function CreateMarket() {
                 <h2 className="text-xl font-semibold">Select Condition</h2>
               </div>
 
-              {eventsLoading ? (
+              {isLoadingStoredConditions ? (
                 <div className="text-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                  <p className="text-text-tertiary mt-2">Loading conditions from blockchain...</p>
+                  <p className="text-text-tertiary mt-2">
+                    Loading conditions...
+                  </p>
                 </div>
-              ) : conditions.length === 0 ? (
+              ) : storedConditions.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-text-tertiary">
                     No conditions found. Create a condition first.
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {conditions.map((condition) => (
-                    <button
-                      key={condition.conditionId}
-                      onClick={() => setSelectedCondition(condition)}
-                      className={`p-6 rounded-xl border-2 text-left transition-all ${
-                        selectedCondition?.conditionId === condition.conditionId
-                          ? "border-primary bg-primary/5 shadow-[0_0_20px_rgba(168,85,247,0.2)]"
-                          : "border-border bg-elevated hover:border-primary/50"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <code className="text-xs text-text-tertiary font-mono truncate max-w-[200px]">
-                          {condition.conditionId}
-                        </code>
-                        {selectedCondition?.conditionId === condition.conditionId && (
-                          <div className="h-5 w-5 rounded-full bg-primary flex items-center justify-center flex-shrink-0 ml-2">
-                            <Check className="h-3 w-3 text-primary-foreground" />
+                <div className="space-y-4">
+                  <Select
+                    onValueChange={(value) => {
+                      const condition = storedConditions.find(
+                        (c) => c.conditionId === value,
+                      );
+                      if (condition) {
+                        setSelectedCondition({
+                          conditionId: condition.conditionId as `0x${string}`,
+                          questionId: "" as `0x${string}`,
+                          question: condition.question,
+                          threshold: condition.threshold,
+                          blockHeight: condition.blockHeight,
+                        });
+                      }
+                    }}
+                    value={selectedCondition?.conditionId}
+                  >
+                    <SelectTrigger className="bg-elevated border-border text-text-primary">
+                      <SelectValue placeholder="Select a condition" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {storedConditions.map((condition) => (
+                        <SelectItem
+                          key={condition.conditionId}
+                          value={condition.conditionId}
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-medium">
+                              {condition.question}
+                            </span>
+                            <span className="text-xs text-text-tertiary font-mono">
+                              {condition.conditionId.slice(0, 20)}...
+                            </span>
                           </div>
-                        )}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {/* Selected condition details */}
+                  {selectedCondition && (
+                    <div className="p-4 bg-elevated border border-border rounded-lg">
+                      <div className="flex items-start justify-between mb-3">
+                        <code className="text-xs text-text-tertiary font-mono truncate">
+                          {selectedCondition.conditionId}
+                        </code>
                       </div>
                       <p className="text-text-primary font-medium mb-2">
-                        {condition.question}
+                        {selectedCondition.question}
                       </p>
-                      <div className="text-xs text-text-tertiary">
-                        Block: {condition.blockHeight}
+                      <div className="flex gap-4 text-xs text-text-tertiary">
+                        <span>Threshold: {selectedCondition.threshold}</span>
+                        <span>Block: {selectedCondition.blockHeight}</span>
                       </div>
-                    </button>
-                  ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -261,9 +496,14 @@ export default function CreateMarket() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {collaterals.map((collateral) => {
-                  const { data: balance } = useBalance({
-                    address,
-                    token: collateral.address,
+                  const { data: balanceRaw } = useReadContract({
+                    address: collateral.address,
+                    abi: ERC20_ABI,
+                    functionName: "balanceOf",
+                    args: address ? [address] : undefined,
+                    query: {
+                      enabled: !!address,
+                    },
                   });
 
                   return (
@@ -291,10 +531,12 @@ export default function CreateMarket() {
                           </div>
                         )}
                       </div>
-                      {balance && (
+                      {balanceRaw !== undefined && (
                         <div className="flex items-baseline gap-2">
                           <span className="text-2xl font-bold text-text-primary">
-                            {parseFloat(formatUnits(balance.value, balance.decimals)).toFixed(4)}
+                            {parseFloat(
+                              formatUnits(balanceRaw, collateral.decimals),
+                            ).toFixed(4)}
                           </span>
                           <span className="text-text-tertiary text-sm">
                             {collateral.symbol}
@@ -348,7 +590,10 @@ export default function CreateMarket() {
                     <p className="text-xs text-text-tertiary">
                       Available:{" "}
                       {parseFloat(
-                        formatUnits(collateralBalance.value, collateralBalance.decimals)
+                        formatUnits(
+                          collateralBalance.value,
+                          collateralBalance.decimals,
+                        ),
                       ).toFixed(4)}{" "}
                       {selectedCollateral?.symbol}
                     </p>
@@ -364,7 +609,8 @@ export default function CreateMarket() {
                           Approve {selectedCollateral.symbol}
                         </p>
                         <p className="text-xs text-text-secondary mt-1">
-                          Allow the contract to spend your {selectedCollateral.symbol}
+                          Allow the contract to spend your{" "}
+                          {selectedCollateral.symbol}
                         </p>
                       </div>
                       {isApproved && (
@@ -421,7 +667,9 @@ export default function CreateMarket() {
                 {selectedCondition && selectedCollateral && amount && (
                   <div className="p-4 bg-elevated border border-border rounded-lg space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-text-secondary">You will receive:</span>
+                      <span className="text-text-secondary">
+                        You will receive:
+                      </span>
                       <span className="text-text-primary font-medium">
                         {amount} YES + {amount} NO tokens
                       </span>
@@ -442,7 +690,7 @@ export default function CreateMarket() {
 
       {/* Transaction Overlay */}
       <TransactionOverlay
-        isOpen={txStatus !== "idle"}
+        isOpen={txStatus !== "pending"}
         status={txStatus}
         txHash={splitHash}
         onClose={() => {}}
@@ -463,7 +711,9 @@ export default function CreateMarket() {
           <div className="space-y-4 py-4">
             {splitHash && (
               <div className="p-4 bg-background border border-border rounded-lg">
-                <p className="text-xs text-text-secondary mb-2">Transaction Hash</p>
+                <p className="text-xs text-text-secondary mb-2">
+                  Transaction Hash
+                </p>
                 <code className="text-xs font-mono text-text-primary break-all block mb-2">
                   {splitHash}
                 </code>

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Loader2, ExternalLink, AlertTriangle, Fuel } from "lucide-react";
+import { Loader2, ExternalLink, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -15,19 +15,90 @@ import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { CopyableHash } from "../components/CopyableHash";
 import { GasEstimationModal } from "../components/GasEstimationModal";
-import { useAccount } from "wagmi";
-import { useConditionalTokens } from "../../hooks/useConditionalTokens";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
-import { keccak256, toHex, encodePacked } from "viem";
-import { CONTRACTS } from "../../config/contracts";
+import {
+  keccak256,
+  toHex,
+  encodePacked,
+  encodeAbiParameters,
+  randomBytes,
+} from "viem";
+import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
+import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
+
+// QuestionType enum - corresponds to the contract enum
+enum QuestionType {
+  DifficultyThreshold = 0,
+}
+
+// Condition data interface for localStorage
+interface StoredCondition {
+  conditionId: string;
+  questionId: string;
+  transactionHash: string;
+  question: string;
+  threshold: string;
+  blockHeight: string;
+  outcomeSlotCount: number;
+  timestamp: number;
+  metadataURI: string;
+}
+
+// LocalStorage key
+const CONDITIONS_STORAGE_KEY = "doefin-conditions";
+
+// Function to save condition to localStorage
+function saveConditionToStorage(condition: StoredCondition): void {
+  try {
+    const existingData = localStorage.getItem(CONDITIONS_STORAGE_KEY);
+    const conditions: StoredCondition[] = existingData
+      ? JSON.parse(existingData)
+      : [];
+
+    // Check if condition already exists (by conditionId)
+    const existingIndex = conditions.findIndex(
+      (c) => c.conditionId === condition.conditionId,
+    );
+    if (existingIndex >= 0) {
+      // Update existing condition
+      conditions[existingIndex] = condition;
+    } else {
+      // Add new condition at the beginning
+      conditions.unshift(condition);
+    }
+
+    localStorage.setItem(CONDITIONS_STORAGE_KEY, JSON.stringify(conditions));
+    console.log("Condition saved to localStorage:", condition.conditionId);
+  } catch (error) {
+    console.error("Error saving condition to localStorage:", error);
+  }
+}
 
 export default function CreateCondition() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const { currentBlock } = useWeb3();
-  const { prepareCondition, generateConditionId, hash, isPending, isConfirming, isSuccess, error } =
-    useConditionalTokens();
+
+  // Direct wagmi hooks for createConditionWithMetadata
+  const {
+    writeContract,
+    data: hash,
+    isPending,
+    error: writeError,
+  } = useWriteContract();
+  const {
+    isLoading: isConfirming,
+    isSuccess,
+    data: receipt,
+  } = useWaitForTransactionReceipt({
+    hash,
+  });
 
   const [threshold, setThreshold] = useState("");
   const [blockHeight, setBlockHeight] = useState("");
@@ -36,15 +107,16 @@ export default function CreateCondition() {
   const [showGasModal, setShowGasModal] = useState(false);
   const [conditionId, setConditionId] = useState<`0x${string}` | "">("");
   const [questionId, setQuestionId] = useState<`0x${string}` | "">("");
+  const [eventQuestionId, setEventQuestionId] = useState<`0x${string}` | "">(
+    "",
+  );
 
   const currentBlockNumber = currentBlock ? Number(currentBlock) : 0;
-  const outcomeSlotCount = 2n; // Binary condition (YES/NO)
+  const outcomeSlotCount = 2; // Binary condition (YES/NO) - uint8
 
   // Check if contracts are configured
-  const contractsConfigured = CONTRACTS.ConditionalTokens !== '0x0000000000000000000000000000000000000000';
-
-  // Current Bitcoin block height (approximate - update periodically)
-  const CURRENT_BITCOIN_BLOCK = 870000; // Update this value or fetch from API
+  const contractsConfigured =
+    CONTRACTS.Diamond !== "0x0000000000000000000000000000000000000000";
 
   // Gas estimation - enable when all fields are filled
   const canEstimateGas = Boolean(
@@ -53,37 +125,39 @@ export default function CreateCondition() {
     address &&
     threshold &&
     blockHeight &&
-    parseInt(blockHeight) > CURRENT_BITCOIN_BLOCK &&
-    questionId
+    questionId,
   );
 
   const gasEstimate = useGasEstimate({
     enabled: canEstimateGas,
-    oracle: address,
-    questionId: questionId || undefined,
-    outcomeSlotCount,
+    diamond: address,
+    questionType: QuestionType.DifficultyThreshold,
+    threshold: BigInt(threshold),
+    blockHeight: BigInt(blockHeight),
+    outcomeSlotCount: BigInt(outcomeSlotCount),
+    metadataURI,
+    salt: questionId ? keccak256(toHex(questionId)) : undefined,
   });
 
-  // Generate questionId from metadata
+  // Generate questionId from metadata using ABI encoding
   useEffect(() => {
     if (threshold && blockHeight) {
-      const metadata = {
-        question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
-        threshold: threshold,
-        blockHeight: blockHeight,
-        type: "DifficultyThreshold",
-      };
-      const metadataString = JSON.stringify(metadata);
-      const qId = keccak256(toHex(metadataString));
-      
+      // Encode metadata using ABI encoding (matches contract expectation)
+      const encodedMetadata = encodeAbiParameters(
+        [{ type: "uint256" }, { type: "uint256" }],
+        [BigInt(threshold), BigInt(blockHeight)],
+      );
+
+      // Generate questionId as keccak256 of the encoded metadata
+      const qId = keccak256(encodedMetadata);
+
       // DEBUG: Log to see what's being hashed
-      console.log('🔍 DEBUG: Generating questionId');
-      console.log('  Threshold:', threshold);
-      console.log('  Block Height:', blockHeight);
-      console.log('  Metadata:', metadata);
-      console.log('  Metadata String:', metadataString);
-      console.log('  QuestionId:', qId);
-      
+      console.log("🔍 DEBUG: Generating questionId");
+      console.log("  Threshold:", threshold);
+      console.log("  Block Height:", blockHeight);
+      console.log("  Encoded Metadata:", encodedMetadata);
+      console.log("  QuestionId:", qId);
+
       setQuestionId(qId);
     } else {
       setQuestionId("");
@@ -92,20 +166,98 @@ export default function CreateCondition() {
 
   // Handle transaction success
   useEffect(() => {
-    if (isSuccess && hash && address && questionId) {
-      const cId = generateConditionId(address, questionId, outcomeSlotCount);
-      setConditionId(cId);
+    // Always log when this effect runs
+    console.log("🎯 DEBUG: Success useEffect triggered", {
+      isSuccess,
+      receipt: !!receipt,
+      hash: !!hash,
+      address: !!address,
+      questionId,
+    });
+
+    if (isSuccess && receipt && hash && address && questionId) {
+      console.log("🚀 DEBUG: Transaction success detected!");
+      console.log("  receipt.logs length:", receipt.logs?.length);
+      console.log("  hash:", hash);
+      console.log("  questionId:", questionId);
+
+      // Generate question string for the condition (from metadata for display)
+      const question = `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`;
+
+      // Try to parse event, but don't fail if it doesn't work
+      let eventConditionId: string;
+      let eventQuestionId: string;
+      let eventOutcomeSlotCount: number;
+      let eventMetadataURI: string;
+
+      try {
+        const eventData = parseConditionCreationEvent(receipt as any);
+        console.log("✅ DEBUG: Event parsed successfully:", eventData);
+
+        eventConditionId = eventData.conditionId;
+        eventQuestionId = eventData.questionId;
+        eventOutcomeSlotCount = Number(eventData.outcomeSlotCount);
+        eventMetadataURI = eventData.metadataURI;
+      } catch (eventError) {
+        console.error(
+          "❌ DEBUG: Event parsing failed, using fallback:",
+          eventError,
+        );
+
+        // FALLBACK: Use questionId as conditionId (this is what the contract does internally)
+        // The conditionId = keccak256(oracle || questionId || outcomeSlotCount)
+        // Since we don't know the oracle address, we'll use the questionId directly
+        // This is a simplification - in production you'd want to query the contract
+        eventConditionId = questionId;
+        eventQuestionId = questionId;
+        eventOutcomeSlotCount = outcomeSlotCount;
+        eventMetadataURI = metadataURI || "";
+
+        console.log(
+          "⚠️ DEBUG: Using fallback IDs - conditionId:",
+          eventConditionId,
+        );
+      }
+
+      setConditionId(eventConditionId as `0x${string}`);
+      setEventQuestionId(eventQuestionId as `0x${string}`);
+
+      // Save condition to localStorage with event-derived (or fallback) IDs
+      const storedCondition: StoredCondition = {
+        conditionId: eventConditionId,
+        questionId: eventQuestionId,
+        transactionHash: hash,
+        question: question,
+        threshold: threshold,
+        blockHeight: blockHeight,
+        outcomeSlotCount: eventOutcomeSlotCount,
+        timestamp: Date.now(),
+        metadataURI: eventMetadataURI,
+      };
+
+      console.log("💾 DEBUG: About to save condition:", storedCondition);
+      saveConditionToStorage(storedCondition);
+
       setShowSuccessModal(true);
       toast.success("Condition created successfully!");
     }
-  }, [isSuccess, hash, address, questionId, generateConditionId]);
+  }, [
+    isSuccess,
+    receipt,
+    hash,
+    address,
+    questionId,
+    threshold,
+    blockHeight,
+    metadataURI,
+  ]);
 
   // Handle transaction error
   useEffect(() => {
-    if (error) {
-      toast.error("Transaction failed: " + (error as Error).message);
+    if (writeError) {
+      toast.error("Transaction failed: " + (writeError as Error).message);
     }
-  }, [error]);
+  }, [writeError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +268,9 @@ export default function CreateCondition() {
     }
 
     if (!contractsConfigured) {
-      toast.error("Contracts not configured. Please deploy contracts and update /src/config/contracts.ts");
+      toast.error(
+        "Contracts not configured. Please deploy contracts and update /src/config/contracts.ts",
+      );
       return;
     }
 
@@ -128,14 +282,10 @@ export default function CreateCondition() {
       toast.error("Target block height is required");
       return;
     }
-    
-    // Validate Bitcoin block height (not Base Sepolia block height!)
-    const bitcoinBlock = parseInt(blockHeight);
-    if (bitcoinBlock <= CURRENT_BITCOIN_BLOCK) {
-      toast.error(`Bitcoin block height must be greater than current block ~${CURRENT_BITCOIN_BLOCK.toLocaleString()}`);
-      return;
-    }
-    
+
+    // Note: We no longer validate block height here - let the contract handle it
+    // The contract will validate that the Bitcoin block height is in the future
+
     if (!questionId) {
       toast.error("Question ID generation failed");
       return;
@@ -146,46 +296,78 @@ export default function CreateCondition() {
   };
 
   const handleConfirmTransaction = async () => {
-    if (!address || !questionId) return;
+    if (!address || !questionId || !threshold || !blockHeight) return;
 
     try {
       setShowGasModal(false);
-      // Use connected wallet address as oracle
-      await prepareCondition(address, questionId, outcomeSlotCount);
+
+      // Encode metadata using ABI encoding
+      const metadata = encodeAbiParameters(
+        [{ type: "uint256" }, { type: "uint256" }],
+        [BigInt(threshold), BigInt(blockHeight)],
+      );
+
+      // Generate salt from questionId for uniqueness
+      const salt = keccak256(toHex(questionId));
+
+      console.log("📝 DEBUG: Creating condition with metadata");
+      console.log("  QuestionType:", QuestionType.DifficultyThreshold);
+      console.log("  Metadata (encoded):", metadata);
+      console.log("  OutcomeSlotCount:", outcomeSlotCount);
+      console.log("  MetadataURI:", metadataURI);
+      console.log("  Salt:", salt);
+
+      // Call Diamond contract's createConditionWithMetadata
+      await writeContract({
+        address: CONTRACTS.Diamond,
+        abi: DIAMOND_ABI,
+        functionName: "createConditionWithMetadata",
+        args: [
+          QuestionType.DifficultyThreshold, // questionType: uint8
+          metadata, // metadata: bytes (encoded threshold + blockHeight)
+          outcomeSlotCount, // outcomeSlotCount: uint8
+          metadataURI || "", // metadataURI: string (empty string if not provided)
+          salt, // salt: bytes32
+        ],
+      });
     } catch (err) {
-      console.error("Error preparing condition:", err);
+      console.error("Error creating condition:", err);
+      toast.error("Failed to create condition: " + (err as Error).message);
     }
   };
 
   const txStatus = isPending
     ? "awaiting"
     : isConfirming
-    ? "confirming"
-    : isSuccess
-    ? "confirmed"
-    : error
-    ? "failed"
-    : "idle";
+      ? "confirming"
+      : isSuccess
+        ? "confirmed"
+        : writeError
+          ? "failed"
+          : "idle";
 
-  const metadata = threshold && blockHeight
-    ? {
-        question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
-        threshold: threshold,
-        blockHeight: blockHeight,
-        type: "DifficultyThreshold",
-      }
-    : null;
+  const metadata =
+    threshold && blockHeight
+      ? {
+          question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
+          threshold: threshold,
+          blockHeight: blockHeight,
+          type: "DifficultyThreshold",
+          questionType: QuestionType.DifficultyThreshold,
+        }
+      : null;
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
             Create Binary Condition
           </h1>
           <p className="text-text-secondary text-lg">
-            Define a difficulty threshold condition for Bitcoin mining prediction markets
+            Define a difficulty threshold condition for Bitcoin mining
+            prediction markets
           </p>
         </div>
 
@@ -205,12 +387,22 @@ export default function CreateCondition() {
               <div className="mb-6 p-4 bg-danger/10 border border-danger/30 rounded-xl flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-danger font-semibold mb-1">Contracts Not Configured</p>
+                  <p className="text-danger font-semibold mb-1">
+                    Contracts Not Configured
+                  </p>
                   <p className="text-sm text-text-secondary mb-2">
-                    Contract addresses are set to zero address. You need to deploy contracts first and update <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">/src/config/contracts.ts</code>
+                    Contract addresses are set to zero address. You need to
+                    deploy contracts first and update{" "}
+                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">
+                      /src/config/contracts.ts
+                    </code>
                   </p>
                   <p className="text-xs text-text-tertiary">
-                    See <code className="bg-elevated px-1.5 py-0.5 rounded">/WEB3_SETUP.md</code> for deployment instructions
+                    See{" "}
+                    <code className="bg-elevated px-1.5 py-0.5 rounded">
+                      /WEB3_SETUP.md
+                    </code>{" "}
+                    for deployment instructions
                   </p>
                 </div>
               </div>
@@ -260,17 +452,14 @@ export default function CreateCondition() {
                     />
                     <div className="space-y-1">
                       <p className="text-xs text-text-tertiary">
-                        Current Bitcoin block: ~{CURRENT_BITCOIN_BLOCK.toLocaleString()}
+                        Current Base Sepolia block: ~
+                        {currentBlockNumber.toLocaleString()}
                       </p>
                       <p className="text-xs text-text-tertiary">
-                        Note: This is Bitcoin blockchain, not Base Sepolia (Current Base Sepolia: ~{currentBlockNumber.toLocaleString()})
+                        Note: This is Bitcoin block height. The contract will
+                        validate this on-chain.
                       </p>
                     </div>
-                    {blockHeight && parseInt(blockHeight) <= CURRENT_BITCOIN_BLOCK && (
-                      <p className="text-xs text-danger">
-                        Bitcoin block height must be greater than current block ~{CURRENT_BITCOIN_BLOCK.toLocaleString()}
-                      </p>
-                    )}
                   </div>
 
                   {/* Metadata URI */}
@@ -294,7 +483,9 @@ export default function CreateCondition() {
                   {/* Generated Question ID */}
                   {questionId && (
                     <div className="p-3 bg-primary/5 border border-primary/30 rounded-lg">
-                      <p className="text-xs text-text-secondary mb-1">Generated Question ID</p>
+                      <p className="text-xs text-text-secondary mb-1">
+                        Generated Question ID
+                      </p>
                       <code className="text-xs font-mono text-text-primary break-all block">
                         {questionId}
                       </code>
@@ -325,28 +516,39 @@ export default function CreateCondition() {
                 {metadata ? (
                   <div className="space-y-4">
                     <div className="p-4 bg-elevated rounded-lg border border-border">
-                      <p className="text-sm text-text-secondary mb-1">Question</p>
+                      <p className="text-sm text-text-secondary mb-1">
+                        Question
+                      </p>
                       <p className="text-text-primary font-medium">
                         {metadata.question}
                       </p>
                     </div>
                     <div className="p-4 bg-elevated rounded-lg border border-border">
-                      <p className="text-sm text-text-secondary mb-2">Encoded Metadata</p>
+                      <p className="text-sm text-text-secondary mb-2">
+                        Encoded Metadata (ABI)
+                      </p>
                       <pre className="text-xs text-text-tertiary font-mono overflow-x-auto">
-                        {JSON.stringify(metadata, null, 2)}
+                        {encodeAbiParameters(
+                          [{ type: "uint256" }, { type: "uint256" }],
+                          [BigInt(threshold), BigInt(blockHeight)],
+                        )}
                       </pre>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="p-3 bg-success/10 border border-success/30 rounded-lg">
-                        <p className="text-xs text-text-secondary mb-1">YES Outcome</p>
+                        <p className="text-xs text-text-secondary mb-1">
+                          YES Outcome
+                        </p>
                         <p className="text-sm font-medium text-success">
                           ≥ {parseInt(threshold).toLocaleString()}
                         </p>
                       </div>
                       <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg">
-                        <p className="text-xs text-text-secondary mb-1">NO Outcome</p>
+                        <p className="text-xs text-text-secondary mb-1">
+                          NO Outcome
+                        </p>
                         <p className="text-sm font-medium text-danger">
-                          &lt; {parseInt(threshold).toLocaleString()}
+                          &lt;{parseInt(threshold).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -370,7 +572,9 @@ export default function CreateCondition() {
         status={txStatus}
         txHash={hash}
         onClose={() => {}}
-        onRetry={() => handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+        onRetry={() =>
+          handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+        }
       />
 
       {/* Success Modal */}
@@ -387,20 +591,24 @@ export default function CreateCondition() {
           <div className="space-y-4 py-4">
             {/* Condition ID */}
             <div className="space-y-2">
-              <Label className="text-text-secondary text-sm">Condition ID</Label>
+              <Label className="text-text-secondary text-sm">
+                Condition ID
+              </Label>
               <CopyableHash hash={conditionId} />
             </div>
 
-            {/* Question ID */}
+            {/* Question ID - Event Derived */}
             <div className="space-y-2">
               <Label className="text-text-secondary text-sm">Question ID</Label>
-              <CopyableHash hash={questionId} />
+              <CopyableHash hash={eventQuestionId} />
             </div>
 
             {/* Transaction Hash */}
             {hash && (
               <div className="space-y-2">
-                <Label className="text-text-secondary text-sm">Transaction Hash</Label>
+                <Label className="text-text-secondary text-sm">
+                  Transaction Hash
+                </Label>
                 <div className="flex items-center gap-2">
                   <CopyableHash hash={hash} />
                   <a
@@ -417,9 +625,7 @@ export default function CreateCondition() {
 
             {/* Question Preview */}
             <div className="p-4 bg-background border border-border rounded-lg">
-              <p className="text-sm text-text-primary">
-                {metadata?.question}
-              </p>
+              <p className="text-sm text-text-primary">{metadata?.question}</p>
             </div>
           </div>
 

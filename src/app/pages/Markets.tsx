@@ -1,130 +1,162 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
 import {
   Search,
   Download,
   X,
-  ArrowUpDown,
-  ChevronRight,
+  TrendingUp,
+  TrendingDown,
   Loader2,
+  Wallet,
 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "../components/ui/sheet";
 import { formatDistanceToNow } from "date-fns";
 import { CopyableHash } from "../components/CopyableHash";
-import { useHistoricalEvents } from "../../hooks/useContractEvents";
+import { useNavigate } from "react-router";
 
-interface Market {
+// Interface for markets stored in localStorage
+interface StoredMarket {
   conditionId: string;
-  questionId: string;
-  question: string;
-  blockNumber: bigint;
+  yesPositionId: string;
+  noPositionId: string;
+  collateralToken: string;
+  amount: string;
   transactionHash: string;
-  timestamp?: number;
-  oracle: string;
+  timestamp: number;
 }
 
-type SortField = "timestamp" | "blockNumber";
-type SortDirection = "asc" | "desc";
+// Interface for conditions stored in localStorage
+interface StoredCondition {
+  conditionId: string;
+  questionId: string;
+  transactionHash: string;
+  question: string;
+  threshold: string;
+  blockHeight: string;
+  outcomeSlotCount: number;
+  timestamp: number;
+  metadataURI: string;
+}
+
+// LocalStorage keys
+const MARKETS_STORAGE_KEY = "doefin-markets";
+const CONDITIONS_STORAGE_KEY = "doefin-conditions";
+
+// Function to load markets from localStorage
+function loadMarketsFromStorage(): StoredMarket[] {
+  try {
+    const storedData = localStorage.getItem(MARKETS_STORAGE_KEY);
+    if (storedData) {
+      return JSON.parse(storedData) as StoredMarket[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading markets from localStorage:", error);
+    return [];
+  }
+}
+
+// Function to load conditions from localStorage
+function loadConditionsFromStorage(): StoredCondition[] {
+  try {
+    const storedData = localStorage.getItem(CONDITIONS_STORAGE_KEY);
+    if (storedData) {
+      return JSON.parse(storedData) as StoredCondition[];
+    }
+    return [];
+  } catch (error) {
+    console.error("Error loading conditions from localStorage:", error);
+    return [];
+  }
+}
+
+// Get collateral symbol from address
+function getCollateralSymbol(address: string): string {
+  const collaterals: Record<string, string> = {
+    "0x6b47fe7d519d9d5d860f3009c3c7e3e0e1e8b9f6": "mBTC",
+    "0x5f1427cb2f3f7f3e8e4e5d6c7b8a9f0e1d2c3b4": "mUSDC",
+  };
+  return collaterals[address.toLowerCase()] || "Unknown";
+}
 
 export default function Markets() {
-  const { events, isLoading } = useHistoricalEvents();
+  const navigate = useNavigate();
+  const [markets, setMarkets] = useState<StoredMarket[]>([]);
+  const [conditions, setConditions] = useState<StoredCondition[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedMarket, setSelectedMarket] = useState<Market | null>(null);
-  const [sortField, setSortField] = useState<SortField>("timestamp");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  // Convert events to markets
-  const markets: Market[] = useMemo(() => {
-    return events
-      .filter((e) => e.type === "ConditionPreparation")
-      .map((e) => ({
-        conditionId: e.args.conditionId as string,
-        questionId: e.args.questionId as string,
-        question: `Condition for question ${(e.args.questionId as string).slice(0, 10)}...`,
-        blockNumber: e.blockNumber,
-        transactionHash: e.transactionHash,
-        timestamp: e.timestamp,
-        oracle: e.args.oracle as string,
-      }));
-  }, [events]);
+  // Load markets and conditions from localStorage on mount
+  useEffect(() => {
+    const loadedMarkets = loadMarketsFromStorage();
+    const loadedConditions = loadConditionsFromStorage();
+    setMarkets(loadedMarkets);
+    setConditions(loadedConditions);
+    setIsLoading(false);
+  }, []);
 
-  const handleSort = (field: SortField) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
-    } else {
-      setSortField(field);
-      setSortDirection("desc");
-    }
+  // Get question for a market by conditionId
+  const getQuestionForMarket = (conditionId: string): string | null => {
+    const condition = conditions.find((c) => c.conditionId === conditionId);
+    return condition?.question || null;
   };
 
-  const handleExportJSON = () => {
-    const dataStr = JSON.stringify(filteredMarkets, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "doefin-markets.json";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    toast.success("Markets exported to JSON");
+  // Get threshold for a market by conditionId
+  const getThresholdForMarket = (conditionId: string): string | null => {
+    const condition = conditions.find((c) => c.conditionId === conditionId);
+    return condition?.threshold || null;
   };
 
-  const filteredMarkets = markets
-    .filter(
-      (market) =>
-        market.question.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        market.conditionId.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        market.questionId.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    .sort((a, b) => {
-      let comparison = 0;
-      if (sortField === "timestamp") {
-        comparison = (a.timestamp || 0) - (b.timestamp || 0);
-      } else if (sortField === "blockNumber") {
-        comparison = Number(a.blockNumber - b.blockNumber);
-      }
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
+  // Get block height for a market by conditionId
+  const getBlockHeightForMarket = (conditionId: string): string | null => {
+    const condition = conditions.find((c) => c.conditionId === conditionId);
+    return condition?.blockHeight || null;
+  };
+
+  // Filter markets by search query
+  const filteredMarkets = useMemo(() => {
+    return markets
+      .filter((market) => {
+        const question = getQuestionForMarket(market.conditionId);
+        const searchLower = searchQuery.toLowerCase();
+        return (
+          market.conditionId.toLowerCase().includes(searchLower) ||
+          market.yesPositionId.toLowerCase().includes(searchLower) ||
+          market.noPositionId.toLowerCase().includes(searchLower) ||
+          (question && question.toLowerCase().includes(searchLower))
+        );
+      })
+      .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
+  }, [markets, conditions, searchQuery]);
+
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">Markets</h1>
             <p className="text-text-secondary text-lg">
-              Browse all active difficulty prediction markets on Base Sepolia
+              Browse your difficulty prediction markets on Base Sepolia
             </p>
-          </div>
-          <div className="flex gap-3">
-            <Button
-              onClick={handleExportJSON}
-              variant="outline"
-              className="bg-elevated border-border hover:bg-elevated/80"
-              disabled={markets.length === 0}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export JSON
-            </Button>
           </div>
         </div>
 
-        {/* Search and Filters */}
+        {/* Search */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-tertiary" />
             <Input
-              placeholder="Search by condition ID, question ID..."
+              placeholder="Search by condition ID, position ID, or question..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-surface border-border text-text-primary focus:ring-primary focus:border-primary"
@@ -140,227 +172,139 @@ export default function Markets() {
           </div>
         </div>
 
-        {/* Markets Table */}
-        <div className="bg-surface border border-border rounded-xl overflow-hidden">
-          {isLoading ? (
-            <div className="py-24 flex flex-col items-center justify-center">
-              <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
-              <p className="text-text-secondary">Loading markets from blockchain...</p>
+        {/* Loading State */}
+        {isLoading ? (
+          <div className="py-24 flex flex-col items-center justify-center">
+            <Loader2 className="h-12 w-12 animate-spin text-primary mb-4" />
+            <p className="text-text-secondary">Loading markets...</p>
+          </div>
+        ) : filteredMarkets.length === 0 ? (
+          /* Empty State */
+          <div className="bg-surface border border-border rounded-xl p-12 text-center">
+            <div className="w-16 h-16 bg-elevated rounded-full flex items-center justify-center mx-auto mb-4">
+              <Wallet className="h-8 w-8 text-text-tertiary" />
             </div>
-          ) : (
-            <>
-              {/* Desktop Table */}
-              <div className="hidden lg:block overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-elevated border-b border-border">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                        Condition ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                        Question ID
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                        <button
-                          onClick={() => handleSort("blockNumber")}
-                          className="flex items-center gap-1 hover:text-text-primary"
-                        >
-                          Block Number
-                          <ArrowUpDown className="h-3 w-3" />
-                        </button>
-                      </th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-text-secondary uppercase tracking-wider">
-                        <button
-                          onClick={() => handleSort("timestamp")}
-                          className="flex items-center gap-1 hover:text-text-primary"
-                        >
-                          Created
-                          <ArrowUpDown className="h-3 w-3" />
-                        </button>
-                      </th>
-                      <th className="px-6 py-4"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {filteredMarkets.length === 0 ? (
-                      <tr>
-                        <td colSpan={5} className="px-6 py-12 text-center">
-                          <p className="text-text-tertiary">
-                            {markets.length === 0
-                              ? "No conditions found on-chain. Create a condition to get started."
-                              : "No markets found matching your search"}
-                          </p>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredMarkets.map((market) => (
-                        <tr
-                          key={market.conditionId}
-                          onClick={() => setSelectedMarket(market)}
-                          className="hover:bg-elevated/50 cursor-pointer transition-colors group"
-                        >
-                          <td className="px-6 py-4">
-                            <code className="text-sm font-mono text-text-primary truncate max-w-[200px] block">
-                              {market.conditionId}
-                            </code>
-                          </td>
-                          <td className="px-6 py-4">
-                            <code className="text-sm font-mono text-text-primary truncate max-w-[200px] block">
-                              {market.questionId}
-                            </code>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-sm text-text-primary">
-                              {market.blockNumber.toString()}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="text-sm text-text-secondary">
-                              {market.timestamp
-                                ? formatDistanceToNow(new Date(market.timestamp * 1000), {
-                                    addSuffix: true,
-                                  })
-                                : "Unknown"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4">
-                            <ChevronRight className="h-5 w-5 text-text-tertiary group-hover:text-primary transition-colors" />
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+            <h3 className="text-xl font-semibold text-text-primary mb-2">
+              No markets found
+            </h3>
+            <p className="text-text-secondary mb-6 max-w-md mx-auto">
+              {markets.length === 0
+                ? "You haven't created any markets yet. Create a condition first, then split your collateral to create a market."
+                : "No markets match your search criteria."}
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button
+                onClick={() => navigate("/create-condition")}
+                variant="outline"
+                className="bg-elevated border-border hover:bg-elevated/80"
+              >
+                Create Condition
+              </Button>
+              <Button
+                onClick={() => navigate("/create-market")}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground"
+              >
+                Create Market
+              </Button>
+            </div>
+          </div>
+        ) : (
+          /* Markets Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredMarkets.map((market) => {
+              const question = getQuestionForMarket(market.conditionId);
+              const threshold = getThresholdForMarket(market.conditionId);
+              const blockHeight = getBlockHeightForMarket(market.conditionId);
 
-              {/* Mobile Cards */}
-              <div className="lg:hidden divide-y divide-border">
-                {filteredMarkets.length === 0 ? (
-                  <div className="px-6 py-12 text-center">
-                    <p className="text-text-tertiary">
-                      {markets.length === 0
-                        ? "No conditions found on-chain"
-                        : "No markets found matching your search"}
-                    </p>
-                  </div>
-                ) : (
-                  filteredMarkets.map((market) => (
-                    <button
-                      key={market.conditionId}
-                      onClick={() => setSelectedMarket(market)}
-                      className="w-full p-4 text-left hover:bg-elevated/50 transition-colors"
-                    >
-                      <div className="space-y-2">
-                        <div>
-                          <p className="text-xs text-text-tertiary mb-1">Condition ID</p>
-                          <code className="text-sm font-mono text-text-primary break-all">
-                            {market.conditionId}
-                          </code>
-                        </div>
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-text-tertiary">
-                            Block {market.blockNumber.toString()}
-                          </span>
-                          {market.timestamp && (
-                            <span className="text-text-secondary">
-                              {formatDistanceToNow(new Date(market.timestamp * 1000), {
-                                addSuffix: true,
-                              })}
-                            </span>
-                          )}
-                        </div>
+              return (
+                <Card
+                  key={market.conditionId + market.timestamp}
+                  className="bg-surface border-border hover:border-primary/50 transition-colors"
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <CardTitle className="text-sm font-medium text-text-primary line-clamp-2">
+                        {question || "Unknown Question"}
+                      </CardTitle>
+                    </div>
+                    {threshold && blockHeight && (
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        <Badge variant="outline" className="text-xs">
+                          {threshold} H/s
+                        </Badge>
+                        <Badge variant="outline" className="text-xs">
+                          Block {Number(blockHeight).toLocaleString()}
+                        </Badge>
                       </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    {/* Collateral & Amount */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-text-tertiary">
+                          Collateral:
+                        </span>
+                        <Badge variant="secondary" className="text-xs">
+                          {getCollateralSymbol(market.collateralToken)}
+                        </Badge>
+                      </div>
+                      <span className="text-sm font-medium text-text-primary">
+                        {market.amount}
+                      </span>
+                    </div>
 
-      {/* Market Detail Sidebar */}
-      <Sheet open={!!selectedMarket} onOpenChange={() => setSelectedMarket(null)}>
-        <SheetContent className="bg-background border-border w-full sm:max-w-xl overflow-y-auto">
-          {selectedMarket && (
-            <>
-              <SheetHeader>
-                <SheetTitle className="text-text-primary text-xl">
-                  Market Details
-                </SheetTitle>
-              </SheetHeader>
+                    {/* Position IDs */}
+                    <div className="space-y-2 pt-2 border-t border-border">
+                      <div className="flex items-center gap-2">
+                        <TrendingUp className="h-3 w-3 text-success" />
+                        <span className="text-xs text-text-tertiary">YES:</span>
+                        <code className="text-xs font-mono text-text-primary truncate">
+                          {market.yesPositionId.slice(0, 14)}...
+                        </code>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <TrendingDown className="h-3 w-3 text-danger" />
+                        <span className="text-xs text-text-tertiary">NO:</span>
+                        <code className="text-xs font-mono text-text-primary truncate">
+                          {market.noPositionId.slice(0, 14)}...
+                        </code>
+                      </div>
+                    </div>
 
-              <div className="mt-6 space-y-6">
-                {/* Condition ID */}
-                <div>
-                  <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                    Condition ID
-                  </h3>
-                  <CopyableHash hash={selectedMarket.conditionId} />
-                </div>
+                    {/* Timestamp & Tx Hash */}
+                    <div className="pt-2 border-t border-border">
+                      <div className="flex items-center justify-between text-xs text-text-tertiary">
+                        <span>
+                          {formatDistanceToNow(new Date(market.timestamp), {
+                            addSuffix: true,
+                          })}
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <CopyableHash
+                          hash={market.transactionHash}
+                          className="text-xs"
+                        />
+                      </div>
+                    </div>
 
-                {/* Question ID */}
-                <div>
-                  <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                    Question ID
-                  </h3>
-                  <CopyableHash hash={selectedMarket.questionId} />
-                </div>
-
-                {/* Oracle */}
-                <div>
-                  <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                    Oracle Address
-                  </h3>
-                  <CopyableHash hash={selectedMarket.oracle} />
-                </div>
-
-                {/* Transaction Hash */}
-                <div>
-                  <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                    Transaction Hash
-                  </h3>
-                  <div className="flex items-center gap-2">
-                    <CopyableHash hash={selectedMarket.transactionHash} />
+                    {/* View on Basescan */}
                     <a
-                      href={`https://sepolia.basescan.org/tx/${selectedMarket.transactionHash}`}
+                      href={`https://sepolia.basescan.org/tx/${market.transactionHash}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-primary hover:underline"
+                      className="text-xs text-primary hover:underline flex items-center gap-1"
                     >
                       View on Basescan
                     </a>
-                  </div>
-                </div>
-
-                {/* Block Info */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                      Block Number
-                    </h3>
-                    <p className="text-text-primary font-mono">
-                      {selectedMarket.blockNumber.toString()}
-                    </p>
-                  </div>
-                  {selectedMarket.timestamp && (
-                    <div>
-                      <h3 className="text-sm font-semibold text-text-secondary mb-2">
-                        Created
-                      </h3>
-                      <p className="text-text-primary">
-                        {formatDistanceToNow(new Date(selectedMarket.timestamp * 1000), {
-                          addSuffix: true,
-                        })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

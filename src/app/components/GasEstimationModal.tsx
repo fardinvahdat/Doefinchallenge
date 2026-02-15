@@ -36,11 +36,11 @@ export function GasEstimationModal({
   const hasError = !!error;
 
   const transactionDetails = {
-    title: "Prepare Condition",
-    description: "Create a new binary prediction condition on the blockchain",
+    title: "Create Condition",
+    description: "Create a new binary prediction condition with metadata on the Diamond contract",
     items: [
-      { label: "Contract", value: "ConditionalTokens" },
-      { label: "Function", value: "prepareCondition()" },
+      { label: "Contract", value: "Diamond" },
+      { label: "Function", value: "createConditionWithMetadata()" },
       { label: "Outcomes", value: "2 (YES/NO)" },
     ],
   };
