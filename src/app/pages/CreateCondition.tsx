@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
@@ -21,6 +21,8 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
+import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
+import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
 import {
   keccak256,
@@ -84,6 +86,17 @@ export default function CreateCondition() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const { currentBlock } = useWeb3();
+  const {
+    height: bitcoinBlockHeight,
+    loading: bitcoinLoading,
+    error: bitcoinError,
+  } = useBitcoinBlockHeight();
+  const {
+    difficulty: bitcoinDifficulty,
+    formatted: bitcoinDifficultyFormatted,
+    loading: difficultyLoading,
+    error: difficultyError,
+  } = useBitcoinDifficulty();
 
   // Direct wagmi hooks for createConditionWithMetadata
   const {
@@ -105,6 +118,7 @@ export default function CreateCondition() {
   const [metadataURI, setMetadataURI] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showGasModal, setShowGasModal] = useState(false);
+  const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [conditionId, setConditionId] = useState<`0x${string}` | "">("");
   const [questionId, setQuestionId] = useState<`0x${string}` | "">("");
   const [eventQuestionId, setEventQuestionId] = useState<`0x${string}` | "">(
@@ -336,15 +350,22 @@ export default function CreateCondition() {
     }
   };
 
-  const txStatus = isPending
-    ? "awaiting"
-    : isConfirming
-      ? "confirming"
-      : isSuccess
-        ? "confirmed"
-        : writeError
-          ? "failed"
-          : "idle";
+  const txStatus = useMemo(() => {
+    if (isPending) return "awaiting";
+    if (isConfirming) return "confirming";
+    if (isSuccess) return "confirmed";
+    if (writeError) return "failed";
+    return "idle";
+  }, [isPending, isConfirming, isSuccess, writeError]);
+
+  // Control TransactionOverlay visibility based on txStatus
+  useEffect(() => {
+    if (txStatus !== "idle") {
+      setShowTransactionOverlay(true);
+    } else {
+      setShowTransactionOverlay(false);
+    }
+  }, [txStatus]);
 
   const metadata =
     threshold && blockHeight
@@ -421,7 +442,9 @@ export default function CreateCondition() {
                       <Input
                         id="threshold"
                         type="number"
-                        placeholder="50000000000"
+                        placeholder={
+                          bitcoinDifficulty?.toString() || "50000000000"
+                        }
                         value={threshold}
                         onChange={(e) => setThreshold(e.target.value)}
                         className="bg-elevated border-border text-text-primary pr-20 focus:ring-primary focus:border-primary"
@@ -431,6 +454,15 @@ export default function CreateCondition() {
                         H/s
                       </span>
                     </div>
+                    <p className="text-xs text-text-tertiary">
+                      {difficultyLoading
+                        ? "Loading Bitcoin difficulty..."
+                        : difficultyError
+                          ? difficultyError
+                          : bitcoinDifficultyFormatted
+                            ? `Current difficulty: ${bitcoinDifficultyFormatted} H/s`
+                            : null}
+                    </p>
                     <p className="text-xs text-text-tertiary">
                       The difficulty value that determines the binary outcome
                     </p>
@@ -444,17 +476,33 @@ export default function CreateCondition() {
                     <Input
                       id="blockHeight"
                       type="number"
-                      placeholder="875000"
+                      placeholder={
+                        bitcoinBlockHeight > 0
+                          ? bitcoinBlockHeight.toString()
+                          : "875000"
+                      }
                       value={blockHeight}
                       onChange={(e) => setBlockHeight(e.target.value)}
                       className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
                       required
                     />
                     <div className="space-y-1">
-                      <p className="text-xs text-text-tertiary">
-                        Current Base Sepolia block: ~
-                        {currentBlockNumber.toLocaleString()}
-                      </p>
+                      {!bitcoinLoading && bitcoinBlockHeight > 0 && (
+                        <p className="text-xs text-text-tertiary">
+                          Current Bitcoin block: ~
+                          {bitcoinBlockHeight.toLocaleString()}
+                        </p>
+                      )}
+                      {bitcoinLoading && (
+                        <p className="text-xs text-text-tertiary">
+                          Loading Bitcoin block height...
+                        </p>
+                      )}
+                      {bitcoinError && (
+                        <p className="text-xs text-text-tertiary">
+                          {bitcoinError}
+                        </p>
+                      )}
                       <p className="text-xs text-text-tertiary">
                         Note: This is Bitcoin block height. The contract will
                         validate this on-chain.
@@ -568,10 +616,15 @@ export default function CreateCondition() {
 
       {/* Transaction Overlay */}
       <TransactionOverlay
-        isOpen={txStatus !== "idle"}
+        isOpen={showTransactionOverlay}
         status={txStatus}
         txHash={hash}
-        onClose={() => {}}
+        onClose={() => {
+          console.log(
+            "[DEBUG] TransactionOverlay onClose called, closing overlay",
+          );
+          setShowTransactionOverlay(false);
+        }}
         onRetry={() =>
           handleSubmit({ preventDefault: () => {} } as React.FormEvent)
         }

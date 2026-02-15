@@ -20,6 +20,7 @@ import {
 } from "../components/ui/dialog";
 import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
+import { GasEstimationModal } from "../components/GasEstimationModal";
 import {
   useAccount,
   useChainId,
@@ -32,6 +33,7 @@ import {
 } from "../../hooks/useSplitPosition";
 import { useTokenApproval } from "../../hooks/useTokenApproval";
 import { useHistoricalEvents } from "../../hooks/useContractEvents";
+import { useGasEstimate } from "../../hooks/useGasEstimate";
 import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
 
@@ -157,6 +159,8 @@ export default function CreateMarket() {
     useState<Collateral | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [showGasModal, setShowGasModal] = useState(false);
+  const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
 
   // Load conditions and markets from localStorage on component mount
   useEffect(() => {
@@ -180,26 +184,27 @@ export default function CreateMarket() {
   }));
 
   // Get collateral balance using ERC20 balanceOf
-  const { data: collateralBalanceRaw } = useReadContract({
-    address: selectedCollateral?.address,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: {
-      enabled: !!address && !!selectedCollateral,
-    },
-  });
+  const { data: collateralBalanceRaw, refetch: refetchBalance } =
+    useReadContract({
+      address: selectedCollateral?.address,
+      abi: ERC20_ABI,
+      functionName: "balanceOf",
+      args: address ? [address] : undefined,
+      query: {
+        enabled: !!address && !!selectedCollateral,
+      },
+    });
 
-  // Format balance using collateral's decimals
+  // Format balance using 18 decimals (contract returns balances in 18 decimals)
   const collateralBalance =
     collateralBalanceRaw !== undefined
       ? {
           value: collateralBalanceRaw,
-          decimals: selectedCollateral?.decimals ?? 18,
+          decimals: 18, // Contract returns all balances in 18 decimals
         }
       : null;
 
-  // Token approval hook
+  // Token approval hook - approval must be for the Diamond contract (not ConditionalTokens)
   const {
     isApproved,
     approve,
@@ -209,7 +214,7 @@ export default function CreateMarket() {
     refetch: refetchAllowance,
   } = useTokenApproval(
     selectedCollateral?.address || CONTRACTS.mBTC,
-    CONTRACTS.ConditionalTokens,
+    CONTRACTS.Diamond, // Must approve the Diamond contract for splitPosition to work
     address,
   );
 
@@ -227,6 +232,27 @@ export default function CreateMarket() {
     receipt,
   } = useSplitPosition();
 
+  // Gas estimation for splitPosition
+  const canEstimateGas = Boolean(
+    isConnected &&
+    address &&
+    selectedCollateral?.address &&
+    selectedCondition?.conditionId &&
+    amount,
+  );
+
+  const amountInContractUnits =
+    canEstimateGas && amount ? parseUnits(amount, 18) : undefined;
+
+  const gasEstimate = useGasEstimate({
+    enabled: canEstimateGas,
+    splitPosition: {
+      collateralToken: selectedCollateral?.address,
+      conditionId: selectedCondition?.conditionId,
+      amount: amountInContractUnits,
+    },
+  });
+
   // Handle approve success
   useEffect(() => {
     if (isApproveSuccess) {
@@ -238,6 +264,11 @@ export default function CreateMarket() {
   // Handle split success
   useEffect(() => {
     if (isSplitSuccess && receipt && selectedCondition && selectedCollateral) {
+      // DEBUG: Log split success for diagnosis
+      console.log(
+        "[DEBUG CreateMarket] Split position succeeded, refetching balance...",
+      );
+
       // Parse the receipt to get position IDs
       parseSplitPositionReceipt(
         receipt,
@@ -272,6 +303,12 @@ export default function CreateMarket() {
           );
           // Show success modal instead of navigating
           setShowSuccessModal(true);
+
+          // Refetch collateral balance after successful split
+          console.log(
+            "[DEBUG CreateMarket] Refetching collateral balance after split success",
+          );
+          refetchBalance();
         })
         .catch((err) => {
           console.error("Error parsing receipt:", err);
@@ -290,6 +327,12 @@ export default function CreateMarket() {
           toast.success("Position split successfully!");
           // Show success modal instead of navigating
           setShowSuccessModal(true);
+
+          // Refetch collateral balance even if receipt parsing fails
+          console.log(
+            "[DEBUG CreateMarket] Refetching collateral balance after split (receipt parse error)",
+          );
+          refetchBalance();
         });
     }
   }, [
@@ -299,6 +342,7 @@ export default function CreateMarket() {
     selectedCollateral,
     amount,
     publicClient,
+    refetchBalance,
   ]);
 
   // Handle errors
@@ -333,20 +377,71 @@ export default function CreateMarket() {
       return;
     }
 
-    const amountWei = parseUnits(
-      amount,
-      selectedCollateral.decimals,
-    ).toString();
-    if (collateralBalance.value < +amountWei) {
+    // Parse amount to the contract's expected format (18 decimals)
+    // The contract's getCollateralUnit returns 1e18, so it expects amounts in 18 decimals
+    // regardless of the token's actual decimals
+    const amountInContractUnits = parseUnits(amount, 18);
+
+    // Also parse in token's native decimals for balance check
+    const amountInTokenUnits = parseUnits(amount, selectedCollateral.decimals);
+
+    // DEBUG: Log the conversion to diagnose formatting issues
+    console.log("[DEBUG CreateMarket] amount conversion:", {
+      inputAmount: amount,
+      tokenDecimals: selectedCollateral.decimals,
+      contractDecimals: 18,
+      amountInContractUnits: amountInContractUnits.toString(),
+      amountInTokenUnits: amountInTokenUnits.toString(),
+      collateralBalance: collateralBalance?.value?.toString(),
+      hasEnoughBalance: collateralBalance
+        ? collateralBalance.value >= amountInTokenUnits
+        : false,
+    });
+
+    // Validate amount is greater than 0
+    if (amountInContractUnits <= 0n) {
+      toast.error("Amount must be greater than 0");
+      return;
+    }
+
+    // Check balance using token's native decimals
+    if (!collateralBalance || collateralBalance.value < amountInTokenUnits) {
       toast.error("Insufficient collateral balance");
       return;
     }
 
+    // Show gas estimation modal instead of executing directly
+    setShowGasModal(true);
+  };
+
+  const handleConfirmSplitPosition = async () => {
+    if (
+      !selectedCondition ||
+      !selectedCollateral ||
+      !amount ||
+      !collateralBalance
+    ) {
+      return;
+    }
+
     try {
+      setShowGasModal(false);
+
+      // Parse amount to the contract's expected format (18 decimals)
+      const amountInContractUnits = parseUnits(amount, 18);
+
+      // DEBUG: Log what we're passing to splitPosition
+      console.log("[DEBUG CreateMarket] calling splitPosition with:", {
+        collateralToken: selectedCollateral.address,
+        conditionId: selectedCondition.conditionId,
+        amount: amountInContractUnits,
+        amountType: typeof amountInContractUnits,
+      });
+
       await splitPosition({
         collateralToken: selectedCollateral.address,
         conditionId: selectedCondition.conditionId,
-        amount: amountWei,
+        amount: amountInContractUnits, // Pass BigInt in contract's expected 18 decimal format
       });
     } catch (err) {
       console.error("Error splitting position:", err);
@@ -378,6 +473,15 @@ export default function CreateMarket() {
     isSplitSuccess,
     splitError,
   ]);
+
+  // Control TransactionOverlay visibility based on txStatus
+  useEffect(() => {
+    if (txStatus !== "pending") {
+      setShowTransactionOverlay(true);
+    } else {
+      setShowTransactionOverlay(false);
+    }
+  }, [txStatus]);
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
@@ -535,7 +639,8 @@ export default function CreateMarket() {
                         <div className="flex items-baseline gap-2">
                           <span className="text-2xl font-bold text-text-primary">
                             {parseFloat(
-                              formatUnits(balanceRaw, collateral.decimals),
+                              // Contract returns balances in 18 decimals
+                              formatUnits(balanceRaw, 18),
                             ).toFixed(4)}
                           </span>
                           <span className="text-text-tertiary text-sm">
@@ -690,10 +795,15 @@ export default function CreateMarket() {
 
       {/* Transaction Overlay */}
       <TransactionOverlay
-        isOpen={txStatus !== "pending"}
+        isOpen={showTransactionOverlay}
         status={txStatus}
         txHash={splitHash}
-        onClose={() => {}}
+        onClose={() => {
+          console.log(
+            "[DEBUG] TransactionOverlay onClose called, closing overlay",
+          );
+          setShowTransactionOverlay(false);
+        }}
         onRetry={() => handleSplitPosition()}
       />
 
@@ -750,6 +860,31 @@ export default function CreateMarket() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Gas Estimation Modal */}
+      <GasEstimationModal
+        open={showGasModal}
+        onOpenChange={setShowGasModal}
+        gasEstimate={gasEstimate}
+        onSubmit={handleConfirmSplitPosition}
+        transactionDetails={{
+          title: "Split Position",
+          description:
+            "Split your collateral into YES/NO position tokens on the Diamond contract",
+          items: [
+            { label: "Contract", value: "Diamond" },
+            { label: "Function", value: "splitPosition()" },
+            {
+              label: "Condition",
+              value: selectedCondition
+                ? `${selectedCondition.conditionId.slice(0, 10)}...`
+                : "-",
+            },
+            { label: "Collateral", value: selectedCollateral?.symbol || "-" },
+            { label: "Amount", value: amount || "-" },
+          ],
+        }}
+      />
     </div>
   );
 }

@@ -1,10 +1,27 @@
-import { Loader2, ExternalLink, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
-import { Dialog, DialogContent } from "./ui/dialog";
+import {
+  Loader2,
+  ExternalLink,
+  CheckCircle2,
+  XCircle,
+  AlertCircle,
+} from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "./ui/dialog";
 import { Button } from "./ui/button";
 
 interface TransactionOverlayProps {
   isOpen: boolean;
-  status: "awaiting" | "pending" | "broadcasting" | "confirming" | "confirmed" | "failed";
+  status:
+    | "awaiting"
+    | "pending"
+    | "broadcasting"
+    | "confirming"
+    | "confirmed"
+    | "failed";
   txHash?: string;
   message?: string;
   error?: string;
@@ -27,7 +44,9 @@ export function TransactionOverlay({
         return {
           icon: <Loader2 className="h-16 w-16 text-accent animate-spin" />,
           title: "Confirm in Wallet",
-          description: message || "Please confirm the transaction in your wallet extension...",
+          description:
+            message ||
+            "Please confirm the transaction in your wallet extension...",
           color: "accent",
           showClose: false,
         };
@@ -35,7 +54,9 @@ export function TransactionOverlay({
         return {
           icon: <Loader2 className="h-16 w-16 text-primary animate-spin" />,
           title: "Transaction Pending",
-          description: message || "Please wait while your transaction is being processed...",
+          description:
+            message ||
+            "Please wait while your transaction is being processed...",
           color: "primary",
           showClose: false,
         };
@@ -51,7 +72,9 @@ export function TransactionOverlay({
         return {
           icon: <Loader2 className="h-16 w-16 text-primary animate-spin" />,
           title: "Waiting for Confirmation",
-          description: message || "Your transaction has been submitted. Waiting for block confirmation...",
+          description:
+            message ||
+            "Your transaction has been submitted. Waiting for block confirmation...",
           color: "primary",
           showClose: false,
         };
@@ -59,7 +82,8 @@ export function TransactionOverlay({
         return {
           icon: <CheckCircle2 className="h-16 w-16 text-success" />,
           title: "Transaction Confirmed",
-          description: message || "Your transaction has been successfully confirmed!",
+          description:
+            message || "Your transaction has been successfully confirmed!",
           color: "success",
           showClose: true,
         };
@@ -67,7 +91,8 @@ export function TransactionOverlay({
         return {
           icon: <XCircle className="h-16 w-16 text-danger" />,
           title: "Transaction Failed",
-          description: error || message || "Your transaction failed. Please try again.",
+          description:
+            error || message || "Your transaction failed. Please try again.",
           color: "danger",
           showClose: true,
         };
@@ -86,7 +111,7 @@ export function TransactionOverlay({
 
   return (
     <Dialog open={isOpen} onOpenChange={config.showClose ? onClose : undefined}>
-      <DialogContent 
+      <DialogContent
         className="bg-elevated border-border max-w-md backdrop-blur-xl"
         onInteractOutside={(e) => {
           if (!config.showClose) {
@@ -94,6 +119,10 @@ export function TransactionOverlay({
           }
         }}
       >
+        <DialogTitle className="sr-only">{config.title}</DialogTitle>
+        <DialogDescription className="sr-only">
+          {config.description}
+        </DialogDescription>
         <div className="flex flex-col items-center text-center py-6 space-y-6">
           <div className="animate-pulse-slow">{config.icon}</div>
           <div className="space-y-2">

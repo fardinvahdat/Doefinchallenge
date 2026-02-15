@@ -24,6 +24,11 @@ interface GasEstimationModalProps {
     error: string | null;
     conditionExists?: boolean;
   };
+  transactionDetails?: {
+    title: string;
+    description: string;
+    items: { label: string; value: string }[];
+  };
 }
 
 export function GasEstimationModal({
@@ -31,19 +36,32 @@ export function GasEstimationModal({
   onOpenChange,
   onSubmit,
   gasEstimate,
+  transactionDetails: customTransactionDetails,
 }: GasEstimationModalProps) {
-  const { estimatedGas, gasPrice, estimatedCostEth, estimatedCostUSD, isEstimating, error, conditionExists } = gasEstimate;
+  const {
+    estimatedGas,
+    gasPrice,
+    estimatedCostEth,
+    estimatedCostUSD,
+    isEstimating,
+    error,
+    conditionExists,
+  } = gasEstimate;
   const hasError = !!error;
 
-  const transactionDetails = {
+  const defaultTransactionDetails = {
     title: "Create Condition",
-    description: "Create a new binary prediction condition with metadata on the Diamond contract",
+    description:
+      "Create a new binary prediction condition with metadata on the Diamond contract",
     items: [
       { label: "Contract", value: "Diamond" },
       { label: "Function", value: "createConditionWithMetadata()" },
       { label: "Outcomes", value: "2 (YES/NO)" },
     ],
   };
+
+  const transactionDetails =
+    customTransactionDetails || defaultTransactionDetails;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -67,12 +85,14 @@ export function GasEstimationModal({
             <p className="text-sm text-text-secondary">
               {transactionDetails.description}
             </p>
-            
+
             <div className="p-3 bg-background border border-border rounded-lg space-y-2">
               {transactionDetails.items.map((item, idx) => (
                 <div key={idx} className="flex justify-between text-sm">
                   <span className="text-text-secondary">{item.label}</span>
-                  <span className="text-text-primary font-mono">{item.value}</span>
+                  <span className="text-text-primary font-mono">
+                    {item.value}
+                  </span>
                 </div>
               ))}
             </div>
@@ -99,22 +119,41 @@ export function GasEstimationModal({
                   <AlertCircle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-danger mb-1">
-                      {gasEstimate.conditionExists ? 'Condition Already Exists' : 'Gas Estimation Failed'}
+                      {gasEstimate.conditionExists
+                        ? "Condition Already Exists"
+                        : "Gas Estimation Failed"}
                     </p>
                     <p className="text-xs text-text-secondary mb-2">{error}</p>
-                    
+
                     {gasEstimate.conditionExists ? (
                       <div className="mt-3 p-2 bg-background/50 rounded border border-border/50">
-                        <p className="text-xs font-semibold text-text-primary mb-2">💡 Solutions:</p>
+                        <p className="text-xs font-semibold text-text-primary mb-2">
+                          💡 Solutions:
+                        </p>
                         <ul className="text-xs text-text-secondary space-y-1 list-disc list-inside">
-                          <li>Change the <span className="font-mono text-primary">threshold</span> value</li>
-                          <li>Change the <span className="font-mono text-primary">block height</span> value</li>
-                          <li>Or use the existing condition in Create Market</li>
+                          <li>
+                            Change the{" "}
+                            <span className="font-mono text-primary">
+                              threshold
+                            </span>{" "}
+                            value
+                          </li>
+                          <li>
+                            Change the{" "}
+                            <span className="font-mono text-primary">
+                              block height
+                            </span>{" "}
+                            value
+                          </li>
+                          <li>
+                            Or use the existing condition in Create Market
+                          </li>
                         </ul>
                       </div>
                     ) : (
                       <p className="text-xs text-text-tertiary mt-2">
-                        The transaction may fail. Please check your inputs and try again.
+                        The transaction may fail. Please check your inputs and
+                        try again.
                       </p>
                     )}
                   </div>
@@ -125,7 +164,9 @@ export function GasEstimationModal({
                 {/* Main Cost Display */}
                 <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-text-secondary">Estimated Cost</span>
+                    <span className="text-sm text-text-secondary">
+                      Estimated Cost
+                    </span>
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4 text-success" />
                       <span className="text-xs text-success">Low</span>
@@ -146,7 +187,9 @@ export function GasEstimationModal({
                 <div className="grid grid-cols-2 gap-3">
                   {/* Gas Limit */}
                   <div className="p-3 bg-background border border-border rounded-lg">
-                    <p className="text-xs text-text-secondary mb-1">Gas Limit</p>
+                    <p className="text-xs text-text-secondary mb-1">
+                      Gas Limit
+                    </p>
                     <p className="text-lg font-semibold text-text-primary">
                       {estimatedGas.toLocaleString()}
                     </p>
@@ -155,7 +198,9 @@ export function GasEstimationModal({
 
                   {/* Gas Price */}
                   <div className="p-3 bg-background border border-border rounded-lg">
-                    <p className="text-xs text-text-secondary mb-1">Gas Price</p>
+                    <p className="text-xs text-text-secondary mb-1">
+                      Gas Price
+                    </p>
                     <p className="text-lg font-semibold text-text-primary">
                       {formatGwei(gasPrice)}
                     </p>
@@ -169,7 +214,8 @@ export function GasEstimationModal({
                     <Clock className="h-4 w-4 text-accent flex-shrink-0 mt-0.5" />
                     <div>
                       <p className="text-xs text-text-secondary">
-                        This estimate includes a 20% safety buffer. Actual cost may be lower.
+                        This estimate includes a 20% safety buffer. Actual cost
+                        may be lower.
                       </p>
                     </div>
                   </div>
@@ -183,7 +229,9 @@ export function GasEstimationModal({
             <span className="text-xs text-text-secondary">Network</span>
             <div className="flex items-center gap-2">
               <div className="h-2 w-2 rounded-full bg-success animate-pulse" />
-              <span className="text-xs font-medium text-text-primary">Base Sepolia</span>
+              <span className="text-xs font-medium text-text-primary">
+                Base Sepolia
+              </span>
             </div>
           </div>
         </div>

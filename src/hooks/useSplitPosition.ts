@@ -265,7 +265,14 @@ export function useSplitPosition() {
     conditionId: Address;
     amount: bigint;
   }) => {
-    debugger;
+    // DEBUG: Log the amount type and value to diagnose formatting issues
+    console.log("[DEBUG splitPosition] amount received:", {
+      amount,
+      type: typeof amount,
+      isBigInt: typeof amount === "bigint",
+      stringValue: typeof amount === "bigint" ? amount.toString() : amount,
+    });
+
     if (!userAddress) {
       throw new Error("Wallet not connected");
     }
@@ -283,10 +290,24 @@ export function useSplitPosition() {
     // Ensure conditionId is properly formatted as hex string
     const conditionIdHex = toBytes32Hex(conditionId);
 
+    // DEBUG: Log condition validation details
+    console.log("[DEBUG splitPosition] condition validation:", {
+      conditionId,
+      conditionIdHex,
+      localStorageKey: `doefin-conditions`,
+    });
+
     // 1. Check if condition exists and is active
-    const condition = JSON.parse(
-      localStorage.getItem(`doefin-conditions`) || "",
-    ).find((item: any) => item.conditionId == conditionIdHex);
+    const storedConditions = JSON.parse(
+      localStorage.getItem(`doefin-conditions`) || "[]",
+    );
+    console.log("[DEBUG splitPosition] stored conditions:", storedConditions);
+
+    const condition = storedConditions.find(
+      (item: any) => item.conditionId === conditionIdHex,
+    );
+
+    console.log("[DEBUG splitPosition] found condition:", condition);
 
     if (!condition) {
       throw new Error("Condition does not exist");
@@ -326,9 +347,26 @@ export function useSplitPosition() {
       args: [collateralToken],
     });
 
+    // DEBUG: Log collateral unit validation
+    console.log("[DEBUG splitPosition] collateral unit check:", {
+      collateralUnit,
+      amount,
+      amountDivisibleByUnit: amount % collateralUnit === 0n,
+    });
+
     // Check if collateral token is approved for the diamond contract
     // The user needs to have approved the diamond contract to spend their tokens
     // This is handled separately via useTokenApproval hook
+
+    // DEBUG: Log final writeContract call
+    console.log("[DEBUG splitPosition] calling writeContract with:", {
+      collateralToken,
+      parentCollectionId: zeroHash,
+      conditionIdHex,
+      partition: BINARY_PARTITION,
+      amount,
+      amountType: typeof amount,
+    });
 
     return writeContract({
       address: CONTRACTS.Diamond,

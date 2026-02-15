@@ -30,6 +30,9 @@ export function WalletConnect() {
                 opacity: 0,
                 pointerEvents: "none",
                 userSelect: "none",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
               },
             })}
           >
@@ -39,7 +42,7 @@ export function WalletConnect() {
                   <button
                     onClick={openConnectModal}
                     type="button"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground shadow hover:bg-primary/90 h-9 px-4 py-2 rounded-md hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-95"
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-white shadow hover:bg-primary/90 h-9 px-4 py-0 rounded-md hover:shadow-[0_0_20px_rgba(168,85,247,0.4)] active:scale-95"
                   >
                     <svg
                       xmlns="http://www.w3.org/2000/svg"
@@ -66,7 +69,7 @@ export function WalletConnect() {
                   <button
                     onClick={openChainModal}
                     type="button"
-                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-danger text-background shadow hover:bg-danger/90 h-9 px-4 py-2 rounded-md"
+                    className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-danger text-background shadow hover:bg-danger/90 h-9 px-4 py-0 rounded-md"
                   >
                     Wrong network
                   </button>

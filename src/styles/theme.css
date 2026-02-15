@@ -234,9 +234,9 @@
     border: 1px solid #222222 !important;
     border-radius: 8px !important;
     padding: 16px !important;
-    margin: 0 0 12px 0 !important;
+    margin: 0 0 4px 0 !important;
     transition: all 0.2s ease !important;
-    min-height: 64px !important;
+    min-height: 40px !important;
   }
 
   [data-rk] button[type="button"]:not([aria-label*="Close"]):hover {

@@ -79,12 +79,6 @@ export function Navigation() {
 
           {/* Wallet Button */}
           <div className="flex items-center space-x-3">
-            <div className="hidden sm:flex items-center px-3 py-1.5 rounded-full bg-elevated border border-border">
-              <div className="h-2 w-2 rounded-full bg-success animate-pulse mr-2" />
-              <span className="text-xs font-medium text-text-secondary">
-                Base Sepolia
-              </span>
-            </div>
             <WalletConnect />
           </div>
         </div>
