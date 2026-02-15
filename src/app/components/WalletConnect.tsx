@@ -1,5 +1,5 @@
-import { ConnectButton } from '@rainbow-me/rainbowkit';
-import { ChevronDown } from 'lucide-react';
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { ChevronDown } from "lucide-react";
 
 export function WalletConnect() {
   return (
@@ -15,22 +15,21 @@ export function WalletConnect() {
       }) => {
         // Note: If your app doesn't use authentication, you
         // can remove all 'authenticationStatus' checks
-        const ready = mounted && authenticationStatus !== 'loading';
+        const ready = mounted && authenticationStatus !== "loading";
         const connected =
           ready &&
           account &&
           chain &&
-          (!authenticationStatus ||
-            authenticationStatus === 'authenticated');
+          (!authenticationStatus || authenticationStatus === "authenticated");
 
         return (
           <div
             {...(!ready && {
-              'aria-hidden': true,
-              'style': {
+              "aria-hidden": true,
+              style: {
                 opacity: 0,
-                pointerEvents: 'none',
-                userSelect: 'none',
+                pointerEvents: "none",
+                userSelect: "none",
               },
             })}
           >
@@ -74,6 +73,11 @@ export function WalletConnect() {
                 );
               }
 
+              // Safely format balance display, handling NaN and undefined cases
+              const balanceDisplay = account.displayBalance
+                ? account.displayBalance.replace(/NaN/g, "0")
+                : "0.00 ETH";
+
               return (
                 <div className="flex gap-2">
                   <button
@@ -90,7 +94,7 @@ export function WalletConnect() {
                       >
                         {chain.iconUrl && (
                           <img
-                            alt={chain.name ?? 'Chain icon'}
+                            alt={chain.name ?? "Chain icon"}
                             src={chain.iconUrl}
                             className="w-4 h-4"
                           />
@@ -111,9 +115,9 @@ export function WalletConnect() {
                       <span className="text-xs font-mono">
                         {account.displayName}
                       </span>
-                      {account.displayBalance && (
+                      {balanceDisplay && (
                         <span className="text-xs text-text-tertiary hidden md:inline">
-                          {account.displayBalance}
+                          {balanceDisplay}
                         </span>
                       )}
                       <ChevronDown className="h-4 w-4 ml-1" />
