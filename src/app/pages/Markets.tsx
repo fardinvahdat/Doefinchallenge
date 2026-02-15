@@ -80,11 +80,12 @@ function loadConditionsFromStorage(): StoredCondition[] {
 
 // Get collateral symbol from address
 function getCollateralSymbol(address: string): string {
+  console.log(address)
   const collaterals: Record<string, string> = {
-    "0x6b47fe7d519d9d5d860f3009c3c7e3e0e1e8b9f6": "mBTC",
-    "0x5f1427cb2f3f7f3e8e4e5d6c7b8a9f0e1d2c3b4": "mUSDC",
+    "0x324c4A1e28760bCC45cDE980D36A78C971653228": "mBTC",
+    "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba": "mUSDC",
   };
-  return collaterals[address.toLowerCase()] || "Unknown";
+  return collaterals[address] || "Unknown";
 }
 
 export default function Markets() {
