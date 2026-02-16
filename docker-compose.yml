@@ -1,0 +1,18 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wagmi-react-dev
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/frontend
+      - /frontend/node_modules             # keep container's node_modules
+      - /frontend/.pnpm-store              # optional speedup
+    environment:
+      - NODE_ENV=development
+      - CHOKIDAR_USEPOLLING=true           # file watching in Docker
+      - VITE_WALLETCONNECT_PROJECT_ID=${VITE_WALLETCONNECT_PROJECT_ID}  # if you use it
+    tty: true
+    stdin_open: true
