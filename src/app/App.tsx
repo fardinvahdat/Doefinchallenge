@@ -4,7 +4,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
 import { router } from "./routes";
 import { config } from "../config/wagmi";
-import NetworkMonitor from "./components/NetworkMonitor";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const queryClient = new QueryClient();
@@ -23,7 +22,6 @@ export default function App() {
           })}
           modalSize="compact"
         >
-          {/* <NetworkMonitor /> */}
           <RouterProvider router={router} />
         </RainbowKitProvider>
       </QueryClientProvider>
