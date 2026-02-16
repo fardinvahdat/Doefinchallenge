@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { CopyableHash } from "../components/CopyableHash";
 import { useNavigate } from "react-router";
+import { CONTRACTS } from "../../config/contracts";
 
 // Interface for markets stored in localStorage
 interface StoredMarket {
@@ -80,10 +81,10 @@ function loadConditionsFromStorage(): StoredCondition[] {
 
 // Get collateral symbol from address
 function getCollateralSymbol(address: string): string {
-  console.log(address)
+  console.log(address);
   const collaterals: Record<string, string> = {
-    "0x324c4A1e28760bCC45cDE980D36A78C971653228": "mBTC",
-    "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba": "mUSDC",
+    [CONTRACTS.mBTC]: "mBTC",
+    [CONTRACTS.mUSDC]: "mUSDC",
   };
   return collaterals[address] || "Unknown";
 }
@@ -137,7 +138,6 @@ export default function Markets() {
       })
       .sort((a, b) => b.timestamp - a.timestamp); // Most recent first
   }, [markets, conditions, searchQuery]);
-
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">

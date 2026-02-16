@@ -2,10 +2,14 @@ import { Address } from "viem";
 
 // Contract addresses on Base Sepolia
 export const CONTRACTS = {
-  ConditionalTokens: "0x3F84bEf67EA2B582a3d0a4f6f6B15776F12342c9" as Address,
-  Diamond: "0x75ed83f1fd159050E1ed546C1A584ac2c9deE225" as Address,
-  mBTC: "0x324c4A1e28760bCC45cDE980D36A78C971653228" as Address,
-  mUSDC: "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba" as Address,
+  ConditionalTokens: (import.meta.env.VITE_CONDITIONAL_TOKENS_ADDRESS ||
+    "0x3F84bEf67EA2B582a3d0a4f6f6B15776F12342c9") as Address,
+  Diamond: (import.meta.env.VITE_DIAMOND_ADDRESS ||
+    "0x75ed83f1fd159050E1ed546C1A584ac2c9deE225") as Address,
+  mBTC: (import.meta.env.VITE_MBTC_ADDRESS ||
+    "0x324c4A1e28760bCC45cDE980D36A78C971653228") as Address,
+  mUSDC: (import.meta.env.VITE_MUSDC_ADDRESS ||
+    "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba") as Address,
 } as const;
 
 // ERC20 ABI for token approvals and balances

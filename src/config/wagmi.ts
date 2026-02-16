@@ -3,7 +3,7 @@ import { http } from "wagmi";
 import { base, baseSepolia, mainnet, sepolia } from "wagmi/chains";
 
 // WalletConnect Project ID from https://cloud.walletconnect.com/
-const projectId = "efb47ff3cfb810a78ddeca11318457f9";
+const projectId = import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "";
 
 export const config = getDefaultConfig({
   appName: "Doefin V2",

@@ -1,3 +1,5 @@
+const filebaseApiKey = import.meta.env.VITE_FILEBASE_API_KEY || "";
+
 export async function uploadFileToFilebase(
   file: File,
 ): Promise<{ cid: string; url: string }> {
@@ -8,8 +10,7 @@ export async function uploadFileToFilebase(
 
   // Filebase RPC API (Kubo-compatible)
   const RPC_ENDPOINT = "https://rpc.filebase.io/api/v0/add";
-  const RPC_KEY =
-    "MzVERkQyMkY0Rjk3MDY4REU2NkY6Zk1XcXFZQWFsWXd0ZnFrMElNb3RhQmtuWExicFBaMVNwQ0t1dFhJbjpkb2VmaW4="; // Your provided key
+  const RPC_KEY = filebaseApiKey;
 
   try {
     const formData = new FormData();
