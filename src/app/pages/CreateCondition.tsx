@@ -33,7 +33,7 @@ import {
 } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
-import { uploadFileToFilebase } from "@/utils/filebase";
+import { uploadFileToFilebase } from "../../utils/filebase";
 
 // QuestionType enum - corresponds to the contract enum
 enum QuestionType {
@@ -340,18 +340,24 @@ export default function CreateCondition() {
         question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
       };
 
-      // Convert JSON to File object
-      const metadataFile = new File(
-        [JSON.stringify(jsonMetadata)],
-        "metadata.json",
-        { type: "application/json" },
-      );
+      // Convert JSON to File object with timestamp for unique filename
+      const timestamp = Date.now();
+      
+      // Convert object → JSON string
+      const jsonString = JSON.stringify(jsonMetadata, null, 2);
+
+      // Create Blob
+      const blob = new Blob([jsonString], {
+        type: "application/json",
+      });
+
+      // Create File from Blob
+      const jsonFile = new File([blob], `condition-${timestamp}.json`, {
+        type: "application/json",
+      });
 
       // Upload to IPFS using Filebase
-      const result = await uploadFileToFilebase(
-        metadataFile,
-        "doe-finch-challenge",
-      );
+      const result = await uploadFileToFilebase(jsonFile);
 
       // Use the returned IPFS URL as metadata URI
       const ipfsURI = result.url;
