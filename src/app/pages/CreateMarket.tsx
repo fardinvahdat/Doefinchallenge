@@ -36,6 +36,7 @@ import { useHistoricalEvents } from "../../hooks/useContractEvents";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
 import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
+import NetworkMonitor from "../components/NetworkMonitor";
 
 // Interface for markets stored in localStorage
 interface StoredMarket {
@@ -505,6 +506,7 @@ export default function CreateMarket() {
           </div>
         ) : (
           <div className="space-y-8">
+            <NetworkMonitor />
             {/* Step 1: Select Condition */}
             <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">

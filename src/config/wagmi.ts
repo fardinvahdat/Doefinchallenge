@@ -1,6 +1,6 @@
 import { getDefaultConfig } from "@rainbow-me/rainbowkit";
 import { http } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { base, baseSepolia, mainnet, sepolia } from "wagmi/chains";
 
 // WalletConnect Project ID from https://cloud.walletconnect.com/
 const projectId = "efb47ff3cfb810a78ddeca11318457f9";
@@ -8,9 +8,13 @@ const projectId = "efb47ff3cfb810a78ddeca11318457f9";
 export const config = getDefaultConfig({
   appName: "Doefin V2",
   projectId,
-  chains: [baseSepolia],
+  // Include multiple chains so wagmi can properly detect network changes
+  chains: [baseSepolia, sepolia, base, mainnet],
   transports: {
     [baseSepolia.id]: http(),
+    [sepolia.id]: http(),
+    [base.id]: http(),
+    [mainnet.id]: http(),
   },
   ssr: false,
 });

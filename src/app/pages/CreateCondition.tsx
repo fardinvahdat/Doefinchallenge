@@ -24,16 +24,11 @@ import { useWeb3 } from "../contexts/Web3Context";
 import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
-import {
-  keccak256,
-  toHex,
-  encodePacked,
-  encodeAbiParameters,
-  randomBytes,
-} from "viem";
+import { keccak256, toHex, encodeAbiParameters } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
 import { uploadFileToFilebase } from "../../utils/filebase";
+import NetworkMonitor from "../components/NetworkMonitor";
 
 // QuestionType enum - corresponds to the contract enum
 enum QuestionType {
@@ -342,7 +337,7 @@ export default function CreateCondition() {
 
       // Convert JSON to File object with timestamp for unique filename
       const timestamp = Date.now();
-      
+
       // Convert object → JSON string
       const jsonString = JSON.stringify(jsonMetadata, null, 2);
 
@@ -497,7 +492,7 @@ export default function CreateCondition() {
                 </div>
               </div>
             )}
-
+            <NetworkMonitor />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Form */}
               <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
