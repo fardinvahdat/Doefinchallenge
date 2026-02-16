@@ -33,6 +33,7 @@ import {
 } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
+import { uploadFileToFilebase } from "@/utils/filebase";
 
 // QuestionType enum - corresponds to the contract enum
 enum QuestionType {
@@ -116,6 +117,7 @@ export default function CreateCondition() {
   const [threshold, setThreshold] = useState("");
   const [blockHeight, setBlockHeight] = useState("");
   const [metadataURI, setMetadataURI] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showGasModal, setShowGasModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
@@ -327,8 +329,47 @@ export default function CreateCondition() {
       return;
     }
 
-    // Show gas estimation modal instead of submitting directly
-    setShowGasModal(true);
+    // Show loading indicator while uploading to IPFS
+    setIsUploading(true);
+
+    try {
+      // Create JSON metadata object
+      const jsonMetadata = {
+        "difficulty-threshold": threshold,
+        "target-block-height": blockHeight,
+        question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
+      };
+
+      // Convert JSON to File object
+      const metadataFile = new File(
+        [JSON.stringify(jsonMetadata)],
+        "metadata.json",
+        { type: "application/json" },
+      );
+
+      // Upload to IPFS using Filebase
+      const result = await uploadFileToFilebase(
+        metadataFile,
+        "doe-finch-challenge",
+      );
+
+      // Use the returned IPFS URL as metadata URI
+      const ipfsURI = result.url;
+      console.log("📤 DEBUG: IPFS Upload successful:", ipfsURI);
+
+      setMetadataURI(ipfsURI);
+
+      // Show gas estimation modal after successful upload
+      setShowGasModal(true);
+    } catch (error) {
+      console.error("IPFS upload failed:", error);
+      toast.error(
+        "Failed to upload metadata to IPFS: " + (error as Error).message,
+      );
+      return;
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleConfirmTransaction = async () => {
@@ -532,24 +573,6 @@ export default function CreateCondition() {
                     </div>
                   </div>
 
-                  {/* Metadata URI */}
-                  <div className="space-y-2">
-                    <Label htmlFor="metadataURI" className="text-text-primary">
-                      Metadata URI (Optional)
-                    </Label>
-                    <Input
-                      id="metadataURI"
-                      type="text"
-                      placeholder="ipfs://Qm..."
-                      value={metadataURI}
-                      onChange={(e) => setMetadataURI(e.target.value)}
-                      className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
-                    />
-                    <p className="text-xs text-text-tertiary">
-                      IPFS URI for additional condition metadata
-                    </p>
-                  </div>
-
                   {/* Generated Question ID */}
                   {questionId && (
                     <div className="p-3 bg-primary/5 border border-primary/30 rounded-lg">
@@ -566,12 +589,14 @@ export default function CreateCondition() {
                   <Button
                     type="submit"
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
-                    disabled={isPending || isConfirming}
+                    disabled={isPending || isConfirming || isUploading}
                   >
-                    {isPending || isConfirming ? (
+                    {isPending || isConfirming || isUploading ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Creating Condition...
+                        {isUploading
+                          ? "Uploading to IPFS..."
+                          : "Creating Condition..."}
                       </>
                     ) : (
                       "Create Condition"
