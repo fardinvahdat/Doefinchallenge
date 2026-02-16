@@ -292,13 +292,35 @@ export default function CreateCondition() {
       toast.error("Threshold is required");
       return;
     }
+
+    // Validate threshold is a positive number
+    const thresholdNum = parseFloat(threshold);
+    if (isNaN(thresholdNum) || thresholdNum <= 0) {
+      toast.error(
+        "Difficulty Threshold must be a numeric value greater than zero",
+      );
+      return;
+    }
+
     if (!blockHeight) {
       toast.error("Target block height is required");
       return;
     }
 
-    // Note: We no longer validate block height here - let the contract handle it
-    // The contract will validate that the Bitcoin block height is in the future
+    // Validate block height is a positive number and greater than current Bitcoin block
+    const blockHeightNum = parseFloat(blockHeight);
+    if (isNaN(blockHeightNum) || blockHeightNum <= 0) {
+      toast.error("Target Bitcoin Block Height must be a positive number");
+      return;
+    }
+
+    // Check if block height is in the future (strictly greater than current Bitcoin block)
+    if (bitcoinBlockHeight > 0 && blockHeightNum <= bitcoinBlockHeight) {
+      toast.error(
+        `Target Bitcoin Block Height must be greater than current block (${bitcoinBlockHeight.toLocaleString()})`,
+      );
+      return;
+    }
 
     if (!questionId) {
       toast.error("Question ID generation failed");
