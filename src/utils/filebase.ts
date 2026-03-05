@@ -3,7 +3,6 @@ const filebaseApiKey = import.meta.env.VITE_FILEBASE_API_KEY || "";
 export async function uploadFileToFilebase(
   file: File,
 ): Promise<{ cid: string; url: string }> {
-  debugger;
   const sanitizedName = file.name
     .replace(/\s+/g, "-")
     .replace(/[^a-zA-Z0-9\-\.]/g, "");
