@@ -2,7 +2,7 @@ import { Component, ReactNode, useState } from "react";
 import { RouterProvider } from "react-router";
 import { WagmiProvider } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { RainbowKitProvider, darkTheme } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, midnightTheme } from "@rainbow-me/rainbowkit";
 import { router } from "./routes";
 import { config } from "../config/wagmi";
 import "@rainbow-me/rainbowkit/styles.css";
@@ -52,7 +52,7 @@ export default function App() {
       <WagmiProvider config={config}>
         <QueryClientProvider client={queryClient}>
           <RainbowKitProvider
-            theme={darkTheme({
+            theme={midnightTheme({
               accentColor: "#6366F1",
               accentColorForeground: "white",
               borderRadius: "medium",

@@ -108,7 +108,7 @@ export function Navigation() {
       {/* ── Sidebar panel ─────────────────────────────────────────────── */}
       <div
         id="mobile-sidebar"
-        className={`fixed inset-y-0 min-h-screen -right-6 -top-4 z-50 w-72 md:hidden flex flex-col bg-surface border-l border-border shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 min-h-screen max-h-screen right-0 z-50 w-72 md:hidden flex flex-col bg-surface border-l border-border shadow-2xl transition-transform duration-300 ease-in-out py-2 ${
           sidebarOpen ? "translate-x-0" : "translate-x-full"
         }`}
         role="dialog"

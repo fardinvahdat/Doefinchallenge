@@ -401,50 +401,88 @@ export default function CreateCondition() {
                       : null;
 
                     return (
-                      <div className={`bg-surface border border-border rounded-xl p-6 transition-opacity ${!step1Done ? "opacity-50 pointer-events-none" : ""}`}>
+                      <div
+                        className={`bg-surface border border-border rounded-xl p-6 transition-opacity ${!step1Done ? "opacity-50 pointer-events-none" : ""}`}
+                      >
                         <div className="flex items-center gap-3 mb-5">
-                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm transition-colors ${step2Done ? "bg-success text-background" : step1Done ? "bg-primary text-primary-foreground" : "bg-elevated text-text-tertiary border border-border"}`}>
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm transition-colors ${step2Done ? "bg-success text-background" : step1Done ? "bg-primary text-primary-foreground" : "bg-elevated text-text-tertiary border border-border"}`}
+                          >
                             {step2Done ? <Check className="h-4 w-4" /> : "2"}
                           </div>
                           <div>
-                            <h2 className="font-semibold text-text-primary leading-tight">Choose when to check</h2>
-                            <p className="text-xs text-text-secondary mt-0.5">When should the blockchain look at the difficulty?</p>
+                            <h2 className="font-semibold text-text-primary leading-tight">
+                              Choose when to check
+                            </h2>
+                            <p className="text-xs text-text-secondary mt-0.5">
+                              When should the blockchain look at the difficulty?
+                            </p>
                           </div>
                         </div>
 
                         {!step1Done && (
-                          <p className="text-sm text-text-tertiary italic">Complete step 1 first.</p>
+                          <p className="text-sm text-text-tertiary italic">
+                            Complete step 1 first.
+                          </p>
                         )}
 
                         {step1Done && (
                           <div className="space-y-4">
-                            <p className="text-sm text-text-secondary">Pick how far in the future:</p>
+                            <p className="text-sm text-text-secondary">
+                              Pick how far in the future:
+                            </p>
 
                             {/* Big quick-pick buttons */}
                             {bitcoinBlockHeight > 0 && (
                               <div className="grid grid-cols-3 gap-3">
                                 {presets.map(({ label, blocks }) => {
-                                  const isActive = blockHeight === (bitcoinBlockHeight + blocks).toString();
-                                  const presetDate = new Date(Date.now() + blocks * 10 * 60 * 1000);
+                                  const isActive =
+                                    blockHeight ===
+                                    (bitcoinBlockHeight + blocks).toString();
+                                  const presetDate = new Date(
+                                    Date.now() + blocks * 10 * 60 * 1000,
+                                  );
                                   return (
                                     <button
                                       key={blocks}
                                       type="button"
-                                      onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
+                                      onClick={() =>
+                                        setBlockHeight(
+                                          (
+                                            bitcoinBlockHeight + blocks
+                                          ).toString(),
+                                        )
+                                      }
                                       className={`flex flex-col items-center gap-1 px-3 py-3 rounded-lg border font-medium transition-all duration-150 ${
                                         isActive
                                           ? "bg-primary/15 text-primary"
                                           : "border-border bg-elevated text-text-secondary hover:bg-primary/5 hover:text-primary"
                                       }`}
-                                      style={isActive ? { borderColor: "var(--primary)", boxShadow: "0 0 0 1px var(--primary)" } : undefined}
+                                      style={
+                                        isActive
+                                          ? {
+                                              borderColor: "var(--primary)",
+                                              boxShadow:
+                                                "0 0 0 1px var(--primary)",
+                                            }
+                                          : undefined
+                                      }
                                       aria-pressed={isActive}
                                     >
-                                      <span className="text-sm font-semibold">{label}</span>
+                                      <span className="text-sm font-semibold">
+                                        {label}
+                                      </span>
                                       <span className="text-xs opacity-70">
-                                        {presetDate.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                                        {presetDate.toLocaleDateString(
+                                          undefined,
+                                          { month: "short", year: "numeric" },
+                                        )}
                                       </span>
                                       <span className="text-[10px] font-mono opacity-50 tabular-nums">
-                                        #{(bitcoinBlockHeight + blocks).toLocaleString()}
+                                        #
+                                        {(
+                                          bitcoinBlockHeight + blocks
+                                        ).toLocaleString()}
                                       </span>
                                     </button>
                                   );
@@ -454,28 +492,42 @@ export default function CreateCondition() {
 
                             {/* Manual override */}
                             <details>
-                              <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                              <summary className="text-base transition-colors delay-100 cursor-pointer hover:text-text-secondary list-none">
                                 Enter a specific Bitcoin block number instead ›
                               </summary>
                               <div className="mt-2 space-y-2">
                                 <Input
                                   id="blockHeight"
                                   type="number"
-                                  placeholder={bitcoinBlockHeight > 0 ? (bitcoinBlockHeight + 2016).toString() : "940000"}
+                                  placeholder={
+                                    bitcoinBlockHeight > 0
+                                      ? (bitcoinBlockHeight + 2016).toString()
+                                      : "940000"
+                                  }
                                   value={blockHeight}
-                                  onChange={(e) => setBlockHeight(e.target.value)}
+                                  onChange={(e) =>
+                                    setBlockHeight(e.target.value)
+                                  }
                                   className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
                                   style={
                                     bitcoinBlockHeight > 0 &&
-                                    [2016, 4320, 12960].some((b) => blockHeight === (bitcoinBlockHeight + b).toString())
+                                    [2016, 4320, 12960].some(
+                                      (b) =>
+                                        blockHeight ===
+                                        (bitcoinBlockHeight + b).toString(),
+                                    )
                                       ? { borderColor: "var(--primary)" }
                                       : undefined
                                   }
                                   aria-describedby="blockheight-helper"
                                 />
                                 {!bitcoinLoading && bitcoinBlockHeight > 0 && (
-                                  <p id="blockheight-helper" className="text-xs text-text-tertiary">
-                                    Current Bitcoin block: ~{bitcoinBlockHeight.toLocaleString()}
+                                  <p
+                                    id="blockheight-helper"
+                                    className="text-xs text-text-tertiary"
+                                  >
+                                    Current Bitcoin block: ~
+                                    {bitcoinBlockHeight.toLocaleString()}
                                   </p>
                                 )}
                               </div>
@@ -488,7 +540,12 @@ export default function CreateCondition() {
                                 <p className="text-sm text-text-primary">
                                   The blockchain will check on approximately{" "}
                                   <span className="font-semibold text-success">
-                                    {estDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                                    {estDate.toLocaleDateString(undefined, {
+                                      weekday: "long",
+                                      month: "long",
+                                      day: "numeric",
+                                      year: "numeric",
+                                    })}
                                   </span>
                                 </p>
                               </div>

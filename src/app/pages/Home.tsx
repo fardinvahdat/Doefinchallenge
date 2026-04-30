@@ -29,11 +29,9 @@ export default function Home() {
 
   return (
     <div className="container mx-auto px-4 lg:px-8">
-
       {/* ── Hero ────────────────────────────────────────────────────────── */}
       <div className="flex flex-col items-center justify-center min-h-[calc(100dvh-7rem)] py-16">
         <div className="text-center max-w-4xl mx-auto w-full space-y-6">
-
           {/* Live badge */}
           <div className="inline-flex items-center px-4 py-2 rounded-full bg-elevated border border-border animate-in fade-in slide-in-from-bottom-3 duration-500">
             <div className="h-2 w-2 rounded-full bg-success animate-pulse mr-2" />
@@ -81,51 +79,71 @@ export default function Home() {
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="text-center border-x border-border cursor-help">
-                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-accent">2</div>
+                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-accent">
+                    2
+                  </div>
                   <div className="text-xs md:text-sm text-text-tertiary underline decoration-dashed">
                     Currencies
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Use mBTC or mUSDC to participate — both are free test tokens</p>
+                <p>
+                  Use mBTC or mUSDC to participate — both are free test tokens
+                </p>
               </TooltipContent>
             </Tooltip>
 
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="text-center cursor-help">
-                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-success">100%</div>
+                  <div className="text-xl sm:text-2xl md:text-3xl font-bold text-success">
+                    100%
+                  </div>
                   <div className="text-xs md:text-sm text-text-tertiary underline decoration-dashed">
                     Trustless
                   </div>
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>No middleman — winners are paid automatically by smart contracts</p>
+                <p>
+                  No middleman — winners are paid automatically by smart
+                  contracts
+                </p>
               </TooltipContent>
             </Tooltip>
           </div>
 
           {/* Live Bitcoin data strip */}
-          {(difficultyFormatted || (bitcoinBlockHeight > 0 && !blockLoading)) && (
+          {(difficultyFormatted ||
+            (bitcoinBlockHeight > 0 && !blockLoading)) && (
             <div className="inline-flex flex-wrap items-center justify-center gap-3 sm:gap-4 px-5 py-2.5 rounded-full bg-elevated/60 border border-border/60 text-xs animate-in fade-in duration-700 delay-[180ms]">
               <span className="flex items-center gap-1.5">
                 <span className="h-1.5 w-1.5 rounded-full bg-success animate-pulse" />
-                <span className="text-text-tertiary uppercase tracking-wider font-semibold">Live</span>
+                <span className="text-text-tertiary uppercase tracking-wider font-semibold">
+                  Live
+                </span>
               </span>
               {difficultyFormatted && (
                 <>
                   <span className="h-3 w-px bg-border hidden xs:block" />
-                  <span className="text-text-tertiary hidden xs:inline">Difficulty</span>
-                  <span className="font-mono font-semibold text-accent">{difficultyFormatted}</span>
+                  <span className="text-text-tertiary hidden xs:inline">
+                    Difficulty
+                  </span>
+                  <span className="font-mono font-semibold text-accent">
+                    {difficultyFormatted}
+                  </span>
                 </>
               )}
               {bitcoinBlockHeight > 0 && (
                 <>
                   <span className="h-3 w-px bg-border hidden sm:block" />
-                  <span className="text-text-tertiary hidden sm:inline">Block</span>
-                  <span className="font-mono font-semibold text-text-primary">#{bitcoinBlockHeight.toLocaleString()}</span>
+                  <span className="text-text-tertiary hidden sm:inline">
+                    Block
+                  </span>
+                  <span className="font-mono font-semibold text-text-primary">
+                    #{bitcoinBlockHeight.toLocaleString()}
+                  </span>
                 </>
               )}
             </div>
@@ -146,7 +164,7 @@ export default function Home() {
               <Button
                 size="lg"
                 variant="outline"
-                className="bg-elevated hover:bg-elevated/80 border-border w-full sm:w-auto px-8 py-6 text-lg transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.18)]"
+                className="bg-elevated hover:bg-elevated/80 border-border w-full sm:w-auto px-8 py-6 text-lg transition-all hover:shadow-[0_0_20px_rgba(245,158,11,0.18)] hover:scale-105 active:scale-95"
               >
                 <BarChart3 className="mr-2 h-5 w-5" />
                 Browse Predictions
@@ -157,7 +175,10 @@ export default function Home() {
       </div>
 
       {/* ── How It Works ─────────────────────────────────────────────────── */}
-      <section aria-labelledby="how-it-works-heading" className="py-20 max-w-4xl mx-auto">
+      <section
+        aria-labelledby="how-it-works-heading"
+        className="py-20 max-w-4xl mx-auto"
+      >
         <h2
           id="how-it-works-heading"
           className="text-2xl md:text-3xl font-bold text-center mb-12"
@@ -173,7 +194,8 @@ export default function Home() {
             </div>
             <h4 className="font-semibold mb-2">Connect your wallet</h4>
             <p className="text-sm text-text-secondary">
-              Click "Connect Wallet" in the top right. It's free — use a test wallet for this demo.
+              Click "Connect Wallet" in the top right. It's free — use a test
+              wallet for this demo.
             </p>
           </div>
 
@@ -189,7 +211,8 @@ export default function Home() {
             </div>
             <h4 className="font-semibold mb-2">Pick a prediction</h4>
             <p className="text-sm text-text-secondary">
-              Browse open markets and choose YES (difficulty rises) or NO (difficulty stays low).
+              Browse open markets and choose YES (difficulty rises) or NO
+              (difficulty stays low).
             </p>
           </div>
 
@@ -205,14 +228,18 @@ export default function Home() {
             </div>
             <h4 className="font-semibold mb-2">Collect winnings</h4>
             <p className="text-sm text-text-secondary">
-              When the target Bitcoin block is mined, the smart contract reads the result and pays you automatically.
+              When the target Bitcoin block is mined, the smart contract reads
+              the result and pays you automatically.
             </p>
           </div>
         </div>
       </section>
 
       {/* ── Feature Cards ──────────────────────────────────────────────── */}
-      <section aria-labelledby="features-heading" className="pb-16 max-w-5xl mx-auto">
+      <section
+        aria-labelledby="features-heading"
+        className="pb-16 max-w-5xl mx-auto"
+      >
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           <div className="p-6 rounded-xl bg-surface border border-border hover:border-primary/50 transition-all group animate-in fade-in slide-in-from-bottom-8 duration-500 delay-[250ms]">
             <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center mb-4 group-hover:scale-105 transition-transform duration-200">
@@ -220,8 +247,8 @@ export default function Home() {
             </div>
             <h3 className="text-lg font-semibold mb-2">Pick YES or NO</h3>
             <p className="text-text-secondary text-sm">
-              Predict whether Bitcoin mining difficulty will be above or below
-              a target level at a specific future date.
+              Predict whether Bitcoin mining difficulty will be above or below a
+              target level at a specific future date.
             </p>
           </div>
 
