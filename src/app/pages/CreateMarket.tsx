@@ -21,6 +21,7 @@ import {
 import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { GasEstimationModal } from "../components/GasEstimationModal";
+import { StrikePreview } from "../components/StrikePreview";
 import {
   useAccount,
   useChainId,
@@ -32,180 +33,139 @@ import {
   parseSplitPositionReceipt,
 } from "../../hooks/useSplitPosition";
 import { useTokenApproval } from "../../hooks/useTokenApproval";
-import { useHistoricalEvents } from "../../hooks/useContractEvents";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
+import { useTokens, type ApiToken } from "../../hooks/useTokens";
+import { useConditions, parseQuestionString, type ApiCondition } from "../../hooks/useConditions";
+import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
+import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
 import NetworkMonitor from "../components/NetworkMonitor";
 
-// Interface for markets stored in localStorage
-interface StoredMarket {
-  conditionId: string;
-  yesPositionId: string;
-  noPositionId: string;
-  collateralToken: string;
-  amount: string;
-  transactionHash: string;
-  timestamp: number;
+// TokenCard is a separate component so useReadContract doesn't violate rules of hooks
+function TokenCard({
+  token,
+  selected,
+  walletAddress,
+  onSelect,
+}: {
+  token: ApiToken;
+  selected: boolean;
+  walletAddress: Address | undefined;
+  onSelect: (token: ApiToken) => void;
+}) {
+  const { data: balanceRaw } = useReadContract({
+    address: token.address,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: walletAddress ? [walletAddress] : undefined,
+    query: { enabled: !!walletAddress },
+  });
+
+  const displayBalance =
+    balanceRaw !== undefined
+      ? parseFloat(formatUnits(balanceRaw as bigint, token.decimals)).toFixed(4)
+      : null;
+
+  return (
+    <button
+      onClick={() => onSelect(token)}
+      className={`p-6 rounded-xl border-2 text-left transition-all ${
+        selected
+          ? "border-accent bg-accent/5 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+          : "border-border bg-elevated hover:border-accent/50"
+      }`}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div>
+          <h3 className="text-lg font-bold text-text-primary">{token.symbol}</h3>
+          <p className="text-sm text-text-secondary">{token.name}</p>
+        </div>
+        {selected && (
+          <div className="h-5 w-5 rounded-full bg-accent flex items-center justify-center">
+            <Check className="h-3 w-3 text-accent-foreground" />
+          </div>
+        )}
+      </div>
+      {displayBalance !== null && (
+        <div className="flex items-baseline gap-2">
+          <span className="text-2xl font-bold text-text-primary">
+            {displayBalance}
+          </span>
+          <span className="text-text-tertiary text-sm">{token.symbol}</span>
+        </div>
+      )}
+      <code className="text-xs text-text-tertiary font-mono mt-2 block truncate">
+        {token.address}
+      </code>
+    </button>
+  );
 }
 
-// LocalStorage key for markets
-const MARKETS_STORAGE_KEY = "doefin-markets";
-
-// Function to load markets from localStorage
-function loadMarketsFromStorage(): StoredMarket[] {
-  try {
-    const storedData = localStorage.getItem(MARKETS_STORAGE_KEY);
-    if (storedData) {
-      return JSON.parse(storedData) as StoredMarket[];
-    }
-    return [];
-  } catch (error) {
-    console.error("Error loading markets from localStorage:", error);
-    return [];
-  }
+// Derive selected condition info for display / StrikePreview
+function useSelectedConditionInfo(condition: ApiCondition | null) {
+  return useMemo(() => {
+    if (!condition) return null;
+    const parsed = parseQuestionString(condition.question_string);
+    return {
+      question: condition.question_string,
+      thresholdT: parsed?.thresholdT ?? null,
+      blockHeight: parsed?.blockHeight ?? null,
+    };
+  }, [condition]);
 }
-
-// Function to save a market to localStorage
-function saveMarketToStorage(market: StoredMarket): void {
-  try {
-    const markets = loadMarketsFromStorage();
-    markets.push(market);
-    localStorage.setItem(MARKETS_STORAGE_KEY, JSON.stringify(markets));
-  } catch (error) {
-    console.error("Error saving market to localStorage:", error);
-  }
-}
-
-// Interface for conditions stored in localStorage
-interface StoredCondition {
-  conditionId: string;
-  transactionHash: string;
-  question: string;
-  threshold: string;
-  blockHeight: string;
-  outcomeSlotCount: number;
-  timestamp: number;
-  metadataURI?: string;
-}
-
-// LocalStorage key for conditions
-const CONDITIONS_STORAGE_KEY = "doefin-conditions";
-
-// Function to load conditions from localStorage
-function loadConditionsFromStorage(): StoredCondition[] {
-  try {
-    const storedData = localStorage.getItem(CONDITIONS_STORAGE_KEY);
-    if (storedData) {
-      return JSON.parse(storedData) as StoredCondition[];
-    }
-    return [];
-  } catch (error) {
-    console.error("Error loading conditions from localStorage:", error);
-    return [];
-  }
-}
-
-interface Condition {
-  conditionId: `0x${string}`;
-  questionId: `0x${string}`;
-  question: string;
-  threshold: string;
-  blockHeight: string;
-}
-
-interface Collateral {
-  symbol: string;
-  name: string;
-  address: Address;
-  decimals: number;
-}
-
-const collaterals: Collateral[] = [
-  {
-    symbol: "mBTC",
-    name: "Mock Bitcoin",
-    address: CONTRACTS.mBTC,
-    decimals: 8,
-  },
-  {
-    symbol: "mUSDC",
-    name: "Mock USDC",
-    address: CONTRACTS.mUSDC,
-    decimals: 6,
-  },
-];
 
 export default function CreateMarket() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const currentChain = useChainId();
-  const { events, isLoading: eventsLoading } = useHistoricalEvents();
 
-  // State for markets from localStorage
-  const [storedMarkets, setStoredMarkets] = useState<StoredMarket[]>([]);
-  const [isLoadingStoredMarkets, setIsLoadingStoredMarkets] = useState(true);
+  const { tokens, isLoading: tokensLoading } = useTokens();
+  const { conditions, isLoading: conditionsLoading } = useConditions("active");
+  const { difficulty: bitcoinDifficulty } = useBitcoinDifficulty();
+  const { height: bitcoinBlockHeight } = useBitcoinBlockHeight();
 
-  // State for conditions from localStorage
-  const [storedConditions, setStoredConditions] = useState<StoredCondition[]>(
-    [],
-  );
-  const [isLoadingStoredConditions, setIsLoadingStoredConditions] =
-    useState(true);
-
-  const [selectedCondition, setSelectedCondition] = useState<Condition | null>(
-    null,
-  );
-  const [selectedCollateral, setSelectedCollateral] =
-    useState<Collateral | null>(null);
+  const [selectedCondition, setSelectedCondition] = useState<ApiCondition | null>(null);
+  const [selectedToken, setSelectedToken] = useState<ApiToken | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showGasModal, setShowGasModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
+  const [splitResult, setSplitResult] = useState<{
+    conditionId: string;
+    yesPositionId: string;
+    noPositionId: string;
+  } | null>(null);
 
-  // Load conditions and markets from localStorage on component mount
-  useEffect(() => {
-    const conditions = loadConditionsFromStorage();
-    setStoredConditions(conditions);
-    setIsLoadingStoredConditions(false);
+  const conditionInfo = useSelectedConditionInfo(selectedCondition);
 
-    const markets = loadMarketsFromStorage();
-    setStoredMarkets(markets);
-    setIsLoadingStoredMarkets(false);
-  }, []);
-
-  // Get conditions from localStorage (now the primary source)
-  // Convert StoredCondition to Condition format for compatibility
-  const conditions: Condition[] = storedConditions.map((sc) => ({
-    conditionId: sc.conditionId as `0x${string}`,
-    questionId: "" as `0x${string}`,
-    question: sc.question,
-    threshold: sc.threshold,
-    blockHeight: sc.blockHeight,
-  }));
-
-  // Get collateral balance using ERC20 balanceOf
+  // Collateral balance for selected token
   const { data: collateralBalanceRaw, refetch: refetchBalance } =
     useReadContract({
-      address: selectedCollateral?.address,
+      address: selectedToken?.address,
       abi: ERC20_ABI,
       functionName: "balanceOf",
       args: address ? [address] : undefined,
-      query: {
-        enabled: !!address && !!selectedCollateral,
-      },
+      query: { enabled: !!address && !!selectedToken },
     });
 
-  // Format balance using 18 decimals (contract returns balances in 18 decimals)
+  const tokenDecimals = selectedToken?.decimals ?? 18;
   const collateralBalance =
     collateralBalanceRaw !== undefined
-      ? {
-          value: collateralBalanceRaw,
-          decimals: 18, // Contract returns all balances in 18 decimals
-        }
+      ? { value: collateralBalanceRaw as bigint, decimals: tokenDecimals }
       : null;
 
-  // Token approval hook - approval must be for the Diamond contract (not ConditionalTokens)
+  // Required approval amount in token units — used to check if existing allowance covers the split
+  const requiredApprovalAmount = useMemo(() => {
+    if (!selectedToken || !amount) return undefined;
+    try {
+      return parseUnits(amount, selectedToken.decimals);
+    } catch {
+      return undefined;
+    }
+  }, [selectedToken, amount]);
+
+  // Token approval — spender is always the Diamond; no fallback when no token selected
   const {
     isApproved,
     approve,
@@ -213,16 +173,16 @@ export default function CreateMarket() {
     isConfirming: isApprovingConfirming,
     isSuccess: isApproveSuccess,
     refetch: refetchAllowance,
+    error: approveError,
   } = useTokenApproval(
-    selectedCollateral?.address || CONTRACTS.mBTC,
-    CONTRACTS.Diamond, // Must approve the Diamond contract for splitPosition to work
+    selectedToken?.address,   // undefined when nothing selected — hook stays disabled
+    CONTRACTS.Diamond,
     address,
+    requiredApprovalAmount,
   );
 
-  // Get public client for reading contract data
   const publicClient = usePublicClient();
 
-  // Split position hook
   const {
     splitPosition,
     hash: splitHash,
@@ -233,28 +193,28 @@ export default function CreateMarket() {
     receipt,
   } = useSplitPosition();
 
-  // Gas estimation for splitPosition
+  // Gas estimation — amount in token-native units (consistent with split call)
   const canEstimateGas = Boolean(
     isConnected &&
-    address &&
-    selectedCollateral?.address &&
-    selectedCondition?.conditionId &&
-    amount,
+      address &&
+      selectedToken?.address &&
+      selectedCondition?.condition_id &&
+      amount,
   );
-
   const amountInContractUnits =
-    canEstimateGas && amount ? parseUnits(amount, 18) : undefined;
+    canEstimateGas && amount
+      ? (() => { try { return parseUnits(amount, tokenDecimals); } catch { return undefined; } })()
+      : undefined;
 
   const gasEstimate = useGasEstimate({
     enabled: canEstimateGas,
     splitPosition: {
-      collateralToken: selectedCollateral?.address,
-      conditionId: selectedCondition?.conditionId,
+      collateralToken: selectedToken?.address,
+      conditionId: selectedCondition?.condition_id as Address | undefined,
       amount: amountInContractUnits,
     },
   });
 
-  // Handle approve success
   useEffect(() => {
     if (isApproveSuccess) {
       toast.success("Approval successful!");
@@ -262,20 +222,26 @@ export default function CreateMarket() {
     }
   }, [isApproveSuccess, refetchAllowance]);
 
-  // Handle split success
   useEffect(() => {
-    if (isSplitSuccess && receipt && selectedCondition && selectedCollateral) {
-      // DEBUG: Log split success for diagnosis
-      console.log(
-        "[DEBUG CreateMarket] Split position succeeded, refetching balance...",
-      );
+    if (approveError) {
+      toast.error("Approval failed: " + (approveError as Error).message);
+    }
+  }, [approveError]);
 
-      // Parse the receipt to get position IDs
+  useEffect(() => {
+    if (isSplitSuccess && receipt && selectedCondition && selectedToken) {
+      // Validate condition_id format before using it as bytes32
+      const condId = selectedCondition.condition_id;
+      if (!condId.startsWith("0x") || condId.length !== 66) {
+        toast.error("Invalid condition ID format");
+        return;
+      }
+
       parseSplitPositionReceipt(
         receipt,
         CONTRACTS.Diamond,
-        selectedCollateral.address,
-        selectedCondition.conditionId,
+        selectedToken.address,
+        condId as `0x${string}`,
         publicClient as unknown as {
           readContract: (params: {
             address: Address;
@@ -286,53 +252,23 @@ export default function CreateMarket() {
         },
       )
         .then((result) => {
-          // Save market to localStorage
-          const newMarket: StoredMarket = {
+          setSplitResult({
             conditionId: result.conditionId,
             yesPositionId: result.yesPositionId.toString(),
             noPositionId: result.noPositionId.toString(),
-            collateralToken: selectedCollateral.address,
-            amount: amount,
-            transactionHash: receipt.transactionHash,
-            timestamp: Date.now(),
-          };
-          saveMarketToStorage(newMarket);
-          setStoredMarkets((prev) => [...prev, newMarket]);
-
-          toast.success(
-            `Position split successfully! YES: ${result.yesPositionId.toString().slice(0, 10)}... NO: ${result.noPositionId.toString().slice(0, 10)}...`,
-          );
-          // Show success modal instead of navigating
+          });
+          toast.success("Position split successfully!");
           setShowSuccessModal(true);
-
-          // Refetch collateral balance after successful split
-          console.log(
-            "[DEBUG CreateMarket] Refetching collateral balance after split success",
-          );
           refetchBalance();
         })
-        .catch((err) => {
-          console.error("Error parsing receipt:", err);
-          // Still save basic market data on error but without position IDs
-          const newMarket: StoredMarket = {
-            conditionId: selectedCondition.conditionId,
+        .catch(() => {
+          setSplitResult({
+            conditionId: selectedCondition.condition_id,
             yesPositionId: "",
             noPositionId: "",
-            collateralToken: selectedCollateral.address,
-            amount: amount,
-            transactionHash: receipt.transactionHash,
-            timestamp: Date.now(),
-          };
-          saveMarketToStorage(newMarket);
-          setStoredMarkets((prev) => [...prev, newMarket]);
+          });
           toast.success("Position split successfully!");
-          // Show success modal instead of navigating
           setShowSuccessModal(true);
-
-          // Refetch collateral balance even if receipt parsing fails
-          console.log(
-            "[DEBUG CreateMarket] Refetching collateral balance after split (receipt parse error)",
-          );
           refetchBalance();
         });
     }
@@ -340,13 +276,11 @@ export default function CreateMarket() {
     isSplitSuccess,
     receipt,
     selectedCondition,
-    selectedCollateral,
-    amount,
+    selectedToken,
     publicClient,
     refetchBalance,
   ]);
 
-  // Handle errors
   useEffect(() => {
     if (splitError) {
       toast.error("Transaction failed: " + (splitError as Error).message);
@@ -354,98 +288,55 @@ export default function CreateMarket() {
   }, [splitError]);
 
   const handleApprove = async () => {
-    if (!selectedCollateral) return;
+    if (!selectedToken) return;
     try {
       await approve();
     } catch (err) {
-      console.error("Error approving:", err);
+      toast.error("Approval failed: " + (err instanceof Error ? err.message : "Unknown error"));
     }
   };
 
   const handleSplitPosition = async () => {
-    if (
-      !selectedCondition ||
-      !selectedCollateral ||
-      !amount ||
-      !collateralBalance
-    ) {
+    if (!selectedCondition || !selectedToken || !amount || !collateralBalance) {
       toast.error("Please complete all fields");
       return;
     }
-
     if (!isApproved) {
       toast.error("Please approve collateral first");
       return;
     }
 
-    // Parse amount to the contract's expected format (18 decimals)
-    // The contract's getCollateralUnit returns 1e18, so it expects amounts in 18 decimals
-    // regardless of the token's actual decimals
-    const amountInContractUnits = parseUnits(amount, 18);
+    // Use token-native decimals consistently
+    let amountParsed: bigint;
+    try {
+      amountParsed = parseUnits(amount, selectedToken.decimals);
+    } catch {
+      toast.error("Invalid amount");
+      return;
+    }
 
-    // Also parse in token's native decimals for balance check
-    const amountInTokenUnits = parseUnits(amount, selectedCollateral.decimals);
-
-    // DEBUG: Log the conversion to diagnose formatting issues
-    console.log("[DEBUG CreateMarket] amount conversion:", {
-      inputAmount: amount,
-      tokenDecimals: selectedCollateral.decimals,
-      contractDecimals: 18,
-      amountInContractUnits: amountInContractUnits.toString(),
-      amountInTokenUnits: amountInTokenUnits.toString(),
-      collateralBalance: collateralBalance?.value?.toString(),
-      hasEnoughBalance: collateralBalance
-        ? collateralBalance.value >= amountInTokenUnits
-        : false,
-    });
-
-    // Validate amount is greater than 0
-    if (amountInContractUnits <= 0n) {
+    if (amountParsed <= 0n) {
       toast.error("Amount must be greater than 0");
       return;
     }
-
-    // Check balance using token's native decimals
-    if (!collateralBalance || collateralBalance.value < amountInTokenUnits) {
+    if (collateralBalance.value < amountParsed) {
       toast.error("Insufficient collateral balance");
       return;
     }
-
-    // Show gas estimation modal instead of executing directly
     setShowGasModal(true);
   };
 
   const handleConfirmSplitPosition = async () => {
-    if (
-      !selectedCondition ||
-      !selectedCollateral ||
-      !amount ||
-      !collateralBalance
-    ) {
+    if (!selectedCondition || !selectedToken || !amount || !collateralBalance)
       return;
-    }
-
     try {
       setShowGasModal(false);
-
-      // Parse amount to the contract's expected format (18 decimals)
-      const amountInContractUnits = parseUnits(amount, 18);
-
-      // DEBUG: Log what we're passing to splitPosition
-      console.log("[DEBUG CreateMarket] calling splitPosition with:", {
-        collateralToken: selectedCollateral.address,
-        conditionId: selectedCondition.conditionId,
-        amount: amountInContractUnits,
-        amountType: typeof amountInContractUnits,
-      });
-
       await splitPosition({
-        collateralToken: selectedCollateral.address,
-        conditionId: selectedCondition.conditionId,
-        amount: amountInContractUnits, // Pass BigInt in contract's expected 18 decimal format
+        collateralToken: selectedToken.address,
+        conditionId: selectedCondition.condition_id as `0x${string}`,
+        amount: parseUnits(amount, selectedToken.decimals),
       });
     } catch (err) {
-      console.error("Error splitting position:", err);
       toast.error(
         `Transaction failed: ${err instanceof Error ? err.message : "Unknown error"}`,
       );
@@ -454,44 +345,30 @@ export default function CreateMarket() {
 
   const setMaxAmount = () => {
     if (collateralBalance) {
-      setAmount(
-        formatUnits(collateralBalance.value, collateralBalance.decimals),
-      );
+      setAmount(formatUnits(collateralBalance.value, collateralBalance.decimals));
     }
   };
 
+  // Matches CreateCondition pattern: default "idle", overlay shown when not idle
   const txStatus = useMemo(() => {
     if (isApproving || isApprovingConfirming) return "awaiting";
     if (isSplitting || isSplitConfirming) return "confirming";
     if (isSplitSuccess) return "confirmed";
     if (splitError) return "failed";
-    return "pending";
-  }, [
-    isApproving,
-    isApprovingConfirming,
-    isSplitting,
-    isSplitConfirming,
-    isSplitSuccess,
-    splitError,
-  ]);
+    return "idle";
+  }, [isApproving, isApprovingConfirming, isSplitting, isSplitConfirming, isSplitSuccess, splitError]);
 
-  // Control TransactionOverlay visibility based on txStatus
   useEffect(() => {
-    if (txStatus !== "pending") {
-      setShowTransactionOverlay(true);
-    } else {
-      setShowTransactionOverlay(false);
-    }
+    setShowTransactionOverlay(txStatus !== "idle");
   }, [txStatus]);
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">Create Market</h1>
           <p className="text-text-secondary text-lg">
-            Split collateral into YES/NO position tokens for a condition
+            Split collateral into YES/NO position tokens for an active condition
           </p>
         </div>
 
@@ -500,69 +377,58 @@ export default function CreateMarket() {
             <p className="text-text-secondary text-lg mb-4">
               Please connect your wallet to create a market
             </p>
-            <p className="text-text-tertiary text-sm">
-              Use the Connect Wallet button in the top right corner
-            </p>
           </div>
         ) : (
           <div className="space-y-8">
             <NetworkMonitor />
+
             {/* Step 1: Select Condition */}
             <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
                   1
                 </div>
-                <h2 className="text-xl font-semibold">Select Condition</h2>
+                <h2 className="text-xl font-semibold">Select Active Condition</h2>
               </div>
 
-              {isLoadingStoredConditions ? (
+              {conditionsLoading ? (
                 <div className="text-center py-8">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-                  <p className="text-text-tertiary mt-2">
-                    Loading conditions...
-                  </p>
+                  <p className="text-text-tertiary mt-2">Loading conditions...</p>
                 </div>
-              ) : storedConditions.length === 0 ? (
+              ) : conditions.length === 0 ? (
                 <div className="text-center py-8">
                   <p className="text-text-tertiary">
-                    No conditions found. Create a condition first.
+                    No active conditions found.{" "}
+                    <button
+                      onClick={() => navigate("/create-condition")}
+                      className="text-primary hover:underline"
+                    >
+                      Create one first.
+                    </button>
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <Select
                     onValueChange={(value) => {
-                      const condition = storedConditions.find(
-                        (c) => c.conditionId === value,
-                      );
-                      if (condition) {
-                        setSelectedCondition({
-                          conditionId: condition.conditionId as `0x${string}`,
-                          questionId: "" as `0x${string}`,
-                          question: condition.question,
-                          threshold: condition.threshold,
-                          blockHeight: condition.blockHeight,
-                        });
-                      }
+                      const c = conditions.find((x) => x.condition_id === value) ?? null;
+                      setSelectedCondition(c);
                     }}
-                    value={selectedCondition?.conditionId}
+                    value={selectedCondition?.condition_id}
                   >
                     <SelectTrigger className="bg-elevated border-border text-text-primary">
-                      <SelectValue placeholder="Select a condition" />
+                      <SelectValue placeholder="Select an active condition" />
                     </SelectTrigger>
                     <SelectContent>
-                      {storedConditions.map((condition) => (
-                        <SelectItem
-                          key={condition.conditionId}
-                          value={condition.conditionId}
-                        >
+                      {conditions.map((c) => (
+                        <SelectItem key={c.condition_id} value={c.condition_id}>
                           <div className="flex flex-col">
-                            <span className="font-medium">
-                              {condition.question}
+                            <span className="font-medium line-clamp-1">
+                              {c.question_string || c.condition_id.slice(0, 20) + "..."}
                             </span>
                             <span className="text-xs text-text-tertiary font-mono">
-                              {condition.conditionId.slice(0, 20)}...
+                              {c.condition_id.slice(0, 20)}...
                             </span>
                           </div>
                         </SelectItem>
@@ -570,22 +436,14 @@ export default function CreateMarket() {
                     </SelectContent>
                   </Select>
 
-                  {/* Selected condition details */}
-                  {selectedCondition && (
-                    <div className="p-4 bg-elevated border border-border rounded-lg">
-                      <div className="flex items-start justify-between mb-3">
-                        <code className="text-xs text-text-tertiary font-mono truncate">
-                          {selectedCondition.conditionId}
-                        </code>
-                      </div>
-                      <p className="text-text-primary font-medium mb-2">
-                        {selectedCondition.question}
-                      </p>
-                      <div className="flex gap-4 text-xs text-text-tertiary">
-                        <span>Threshold: {selectedCondition.threshold}</span>
-                        <span>Block: {selectedCondition.blockHeight}</span>
-                      </div>
-                    </div>
+                  {/* Selected condition with StrikePreview */}
+                  {selectedCondition && conditionInfo && (
+                    <StrikePreview
+                      thresholdT={conditionInfo.thresholdT}
+                      blockHeight={conditionInfo.blockHeight}
+                      currentDifficulty={bitcoinDifficulty}
+                      currentBtcBlock={bitcoinBlockHeight}
+                    />
                   )}
                 </div>
               )}
@@ -600,63 +458,28 @@ export default function CreateMarket() {
                 <h2 className="text-xl font-semibold">Select Collateral</h2>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {collaterals.map((collateral) => {
-                  const { data: balanceRaw } = useReadContract({
-                    address: collateral.address,
-                    abi: ERC20_ABI,
-                    functionName: "balanceOf",
-                    args: address ? [address] : undefined,
-                    query: {
-                      enabled: !!address,
-                    },
-                  });
-
-                  return (
-                    <button
-                      key={collateral.symbol}
-                      onClick={() => setSelectedCollateral(collateral)}
-                      className={`p-6 rounded-xl border-2 text-left transition-all ${
-                        selectedCollateral?.symbol === collateral.symbol
-                          ? "border-accent bg-accent/5 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
-                          : "border-border bg-elevated hover:border-accent/50"
-                      }`}
-                    >
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h3 className="text-lg font-bold text-text-primary">
-                            {collateral.symbol}
-                          </h3>
-                          <p className="text-sm text-text-secondary">
-                            {collateral.name}
-                          </p>
-                        </div>
-                        {selectedCollateral?.symbol === collateral.symbol && (
-                          <div className="h-5 w-5 rounded-full bg-accent flex items-center justify-center">
-                            <Check className="h-3 w-3 text-accent-foreground" />
-                          </div>
-                        )}
-                      </div>
-                      {balanceRaw !== undefined && (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-2xl font-bold text-text-primary">
-                            {parseFloat(
-                              // Contract returns balances in 18 decimals
-                              formatUnits(balanceRaw, 18),
-                            ).toFixed(4)}
-                          </span>
-                          <span className="text-text-tertiary text-sm">
-                            {collateral.symbol}
-                          </span>
-                        </div>
-                      )}
-                      <code className="text-xs text-text-tertiary font-mono mt-2 block truncate">
-                        {collateral.address}
-                      </code>
-                    </button>
-                  );
-                })}
-              </div>
+              {tokensLoading ? (
+                <div className="text-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+                  <p className="text-text-tertiary mt-2">Loading tokens...</p>
+                </div>
+              ) : tokens.length === 0 ? (
+                <p className="text-text-tertiary text-center py-4">
+                  No collateral tokens available.
+                </p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {tokens.map((token) => (
+                    <TokenCard
+                      key={token.address}
+                      token={token}
+                      selected={selectedToken?.address === token.address}
+                      walletAddress={address}
+                      onSelect={setSelectedToken}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Step 3: Enter Amount & Execute */}
@@ -682,12 +505,12 @@ export default function CreateMarket() {
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
                       className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
-                      disabled={!selectedCollateral}
+                      disabled={!selectedToken}
                     />
                     <Button
                       onClick={setMaxAmount}
                       variant="outline"
-                      disabled={!selectedCollateral || !collateralBalance}
+                      disabled={!selectedToken || !collateralBalance}
                       className="bg-elevated border-border hover:bg-elevated/80 px-6"
                     >
                       Max
@@ -697,27 +520,24 @@ export default function CreateMarket() {
                     <p className="text-xs text-text-tertiary">
                       Available:{" "}
                       {parseFloat(
-                        formatUnits(
-                          collateralBalance.value,
-                          collateralBalance.decimals,
-                        ),
+                        formatUnits(collateralBalance.value, collateralBalance.decimals),
                       ).toFixed(4)}{" "}
-                      {selectedCollateral?.symbol}
+                      {selectedToken?.symbol}
                     </p>
                   )}
                 </div>
 
                 {/* Approval */}
-                {selectedCollateral && (
+                {selectedToken && (
                   <div className="p-4 bg-accent/5 border border-accent/30 rounded-lg space-y-3">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-text-primary">
-                          Approve {selectedCollateral.symbol}
+                          Approve {selectedToken.symbol}
                         </p>
                         <p className="text-xs text-text-secondary mt-1">
-                          Allow the contract to spend your{" "}
-                          {selectedCollateral.symbol}
+                          Allow the Diamond contract to spend your{" "}
+                          {selectedToken.symbol}
                         </p>
                       </div>
                       {isApproved && (
@@ -727,7 +547,6 @@ export default function CreateMarket() {
                         </div>
                       )}
                     </div>
-
                     {!isApproved && (
                       <Button
                         onClick={handleApprove}
@@ -740,19 +559,19 @@ export default function CreateMarket() {
                             Approving...
                           </>
                         ) : (
-                          `Approve ${selectedCollateral.symbol}`
+                          `Approve ${selectedToken.symbol}`
                         )}
                       </Button>
                     )}
                   </div>
                 )}
 
-                {/* Split Position Button */}
+                {/* Split Button */}
                 <Button
                   onClick={handleSplitPosition}
                   disabled={
                     !selectedCondition ||
-                    !selectedCollateral ||
+                    !selectedToken ||
                     !amount ||
                     !isApproved ||
                     isSplitting ||
@@ -770,22 +589,18 @@ export default function CreateMarket() {
                   )}
                 </Button>
 
-                {/* Info */}
-                {selectedCondition && selectedCollateral && amount && (
+                {/* Summary */}
+                {selectedCondition && selectedToken && amount && (
                   <div className="p-4 bg-elevated border border-border rounded-lg space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-text-secondary">
-                        You will receive:
-                      </span>
+                      <span className="text-text-secondary">You will receive:</span>
                       <span className="text-text-primary font-medium">
                         {amount} YES + {amount} NO tokens
                       </span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-text-secondary">Condition:</span>
-                      <span className="text-text-primary font-mono text-xs truncate max-w-[200px]">
-                        {selectedCondition.conditionId}
-                      </span>
+                      <span className="text-text-secondary">Collateral:</span>
+                      <span className="text-text-primary">{selectedToken.symbol}</span>
                     </div>
                   </div>
                 )}
@@ -795,17 +610,11 @@ export default function CreateMarket() {
         )}
       </div>
 
-      {/* Transaction Overlay */}
       <TransactionOverlay
         isOpen={showTransactionOverlay}
-        status={txStatus}
+        status={txStatus as any}
         txHash={splitHash}
-        onClose={() => {
-          console.log(
-            "[DEBUG] TransactionOverlay onClose called, closing overlay",
-          );
-          setShowTransactionOverlay(false);
-        }}
+        onClose={() => setShowTransactionOverlay(false)}
         onRetry={() => handleSplitPosition()}
       />
 
@@ -814,10 +623,10 @@ export default function CreateMarket() {
         <DialogContent className="bg-elevated border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl text-text-primary">
-              Position Split Successfully! 🎉
+              Position Split Successfully!
             </DialogTitle>
             <DialogDescription className="text-text-secondary">
-              Your collateral has been split into position tokens
+              Your collateral has been split into YES/NO position tokens
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -840,8 +649,13 @@ export default function CreateMarket() {
                 </a>
               </div>
             )}
+            {splitResult?.yesPositionId && (
+              <div className="space-y-2 text-xs font-mono text-text-tertiary">
+                <div>YES: {splitResult.yesPositionId.slice(0, 30)}...</div>
+                <div>NO: {splitResult.noPositionId.slice(0, 30)}...</div>
+              </div>
+            )}
           </div>
-
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -863,7 +677,6 @@ export default function CreateMarket() {
         </DialogContent>
       </Dialog>
 
-      {/* Gas Estimation Modal */}
       <GasEstimationModal
         open={showGasModal}
         onOpenChange={setShowGasModal}
@@ -879,10 +692,10 @@ export default function CreateMarket() {
             {
               label: "Condition",
               value: selectedCondition
-                ? `${selectedCondition.conditionId.slice(0, 10)}...`
+                ? `${selectedCondition.condition_id.slice(0, 10)}...`
                 : "-",
             },
-            { label: "Collateral", value: selectedCollateral?.symbol || "-" },
+            { label: "Collateral", value: selectedToken?.symbol || "-" },
             { label: "Amount", value: amount || "-" },
           ],
         }}

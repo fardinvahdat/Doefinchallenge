@@ -6,10 +6,6 @@ interface BitcoinBlockHeight {
   error: string | null;
 }
 
-/**
- * Hook to fetch the current Bitcoin block height from a public API
- * Uses multiple fallbacks for reliability
- */
 export function useBitcoinBlockHeight(): BitcoinBlockHeight {
   const [state, setState] = useState<BitcoinBlockHeight>({
     height: 0,
@@ -21,7 +17,6 @@ export function useBitcoinBlockHeight(): BitcoinBlockHeight {
     let mounted = true;
 
     const fetchBitcoinBlockHeight = async () => {
-      // Try multiple Bitcoin API endpoints
       const apis = [
         {
           url: "https://blockstream.info/api/blocks/tip/height",
@@ -37,65 +32,37 @@ export function useBitcoinBlockHeight(): BitcoinBlockHeight {
         },
       ];
 
-      let lastError: Error | null = null;
-
       for (const api of apis) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           const response = await fetch(api.url, {
             signal: controller.signal,
-            headers: {
-              Accept: "application/json",
-            },
+            headers: { Accept: "application/json" },
           });
-
           clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const text = await response.text();
-          const height = api.parser(text);
-
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const height = api.parser(await response.text());
           if (mounted && height > 0) {
-            console.log("🔍 DEBUG: Fetched Bitcoin block height:", height);
-            setState({
-              height,
-              loading: false,
-              error: null,
-            });
+            setState({ height, loading: false, error: null });
             return;
           }
-        } catch (error) {
-          lastError = error as Error;
-          console.warn(`Failed to fetch from ${api.url}:`, error);
-          continue; // Try next API
+        } catch {
+          continue;
         }
       }
 
-      // All APIs failed
       if (mounted) {
-        console.error(
-          "❌ DEBUG: All Bitcoin block height APIs failed:",
-          lastError,
-        );
         setState({
           height: 0,
           loading: false,
-          error:
-            "Unable to fetch Bitcoin block height. Please check your internet connection.",
+          error: "Unable to fetch Bitcoin block height.",
         });
       }
     };
 
     fetchBitcoinBlockHeight();
-
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchBitcoinBlockHeight, 60000);
-
+    const interval = setInterval(fetchBitcoinBlockHeight, 60_000);
     return () => {
       mounted = false;
       clearInterval(interval);

@@ -344,7 +344,6 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
           }
         }
       } catch (err: any) {
-        console.error("Gas estimation error:", err);
 
         if (mounted) {
           // Parse error message

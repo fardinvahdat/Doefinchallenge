@@ -1,5 +1,31 @@
+# Dependencies
 node_modules/
+
+# Build outputs
 dist/
 build/
-google drive/
 .vite/
+
+# Generated / tooling outputs
+graphify-out/
+coverage/
+
+# Environment files (keep .env tracked; ignore local overrides)
+.env.local
+.env.*.local
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.local
+*.log
+*.log.*
+
+# IDE
+.idea/
+.vscode/settings.json
+*.suo
+*.user
+
+# Misc
+google drive/

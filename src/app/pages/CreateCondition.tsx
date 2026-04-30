@@ -15,6 +15,7 @@ import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { CopyableHash } from "../components/CopyableHash";
 import { GasEstimationModal } from "../components/GasEstimationModal";
+import { StrikePreview } from "../components/StrikePreview";
 import {
   useAccount,
   useWriteContract,
@@ -24,69 +25,38 @@ import { useWeb3 } from "../contexts/Web3Context";
 import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
 import { useGasEstimate } from "../../hooks/useGasEstimate";
+import { useInvalidateConditions } from "../../hooks/useConditions";
 import { keccak256, toHex, encodeAbiParameters } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
 import { uploadFileToFilebase } from "../../utils/filebase";
 import NetworkMonitor from "../components/NetworkMonitor";
 
-// QuestionType enum - corresponds to the contract enum
 enum QuestionType {
   DifficultyThreshold = 0,
 }
 
-// Condition data interface for localStorage
-interface StoredCondition {
-  conditionId: string;
-  questionId: string;
-  transactionHash: string;
-  question: string;
-  threshold: string;
-  blockHeight: string;
-  outcomeSlotCount: number;
-  timestamp: number;
-  metadataURI: string;
-}
+// Converts a T-notation string (e.g. "145.15") to a raw uint256 BigInt.
+// Uses string-based parsing to avoid IEEE 754 float precision loss.
+function parseTToRaw(tStr: string): bigint | null {
+  const trimmed = tStr.trim();
+  if (!trimmed || !/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  const val = parseFloat(trimmed);
+  if (isNaN(val) || val <= 0) return null;
 
-// LocalStorage key
-const CONDITIONS_STORAGE_KEY = "doefin-conditions";
-
-// Function to save condition to localStorage
-function saveConditionToStorage(condition: StoredCondition): void {
-  try {
-    const existingData = localStorage.getItem(CONDITIONS_STORAGE_KEY);
-    const conditions: StoredCondition[] = existingData
-      ? JSON.parse(existingData)
-      : [];
-
-    // Check if condition already exists (by conditionId)
-    const existingIndex = conditions.findIndex(
-      (c) => c.conditionId === condition.conditionId,
-    );
-    if (existingIndex >= 0) {
-      // Update existing condition
-      conditions[existingIndex] = condition;
-    } else {
-      // Add new condition at the beginning
-      conditions.unshift(condition);
-    }
-
-    localStorage.setItem(CONDITIONS_STORAGE_KEY, JSON.stringify(conditions));
-    console.log("Condition saved to localStorage:", condition.conditionId);
-  } catch (error) {
-    console.error("Error saving condition to localStorage:", error);
-  }
+  const [intPart, fracPart = ""] = trimmed.split(".");
+  const SCALE_DIGITS = 12;
+  const paddedFrac = fracPart.padEnd(SCALE_DIGITS, "0").slice(0, SCALE_DIGITS);
+  return BigInt(intPart) * 1_000_000_000_000n + BigInt(paddedFrac);
 }
 
 export default function CreateCondition() {
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const { currentBlock } = useWeb3();
-  const {
-    height: bitcoinBlockHeight,
-    loading: bitcoinLoading,
-    error: bitcoinError,
-  } = useBitcoinBlockHeight();
+  const invalidateConditions = useInvalidateConditions();
+  const { height: bitcoinBlockHeight, loading: bitcoinLoading, error: bitcoinError } =
+    useBitcoinBlockHeight();
   const {
     difficulty: bitcoinDifficulty,
     formatted: bitcoinDifficultyFormatted,
@@ -94,7 +64,6 @@ export default function CreateCondition() {
     error: difficultyError,
   } = useBitcoinDifficulty();
 
-  // Direct wagmi hooks for createConditionWithMetadata
   const {
     writeContract,
     data: hash,
@@ -105,11 +74,9 @@ export default function CreateCondition() {
     isLoading: isConfirming,
     isSuccess,
     data: receipt,
-  } = useWaitForTransactionReceipt({
-    hash,
-  });
+  } = useWaitForTransactionReceipt({ hash });
 
-  const [threshold, setThreshold] = useState("");
+  const [thresholdT, setThresholdT] = useState("");
   const [blockHeight, setBlockHeight] = useState("");
   const [metadataURI, setMetadataURI] = useState("");
   const [isUploading, setIsUploading] = useState(false);
@@ -117,153 +84,82 @@ export default function CreateCondition() {
   const [showGasModal, setShowGasModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [conditionId, setConditionId] = useState<`0x${string}` | "">("");
-  const [questionId, setQuestionId] = useState<`0x${string}` | "">("");
-  const [eventQuestionId, setEventQuestionId] = useState<`0x${string}` | "">(
+  const [resolvedQuestionId, setResolvedQuestionId] = useState<`0x${string}` | "">(
     "",
   );
+  // Track whether conditionId in the success modal is a fallback (event parse failed)
+  const [conditionIdIsFallback, setConditionIdIsFallback] = useState(false);
+  // Captured display values for the success modal (set before form reset)
+  const [capturedQuestion, setCapturedQuestion] = useState("");
 
   const currentBlockNumber = currentBlock ? Number(currentBlock) : 0;
-  const outcomeSlotCount = 2; // Binary condition (YES/NO) - uint8
-
-  // Check if contracts are configured
+  const outcomeSlotCount = 2;
   const contractsConfigured =
     CONTRACTS.Diamond !== "0x0000000000000000000000000000000000000000";
 
-  // Gas estimation - enable when all fields are filled
+  const thresholdRaw = useMemo(() => parseTToRaw(thresholdT), [thresholdT]);
+
+  const questionId = useMemo((): `0x${string}` | "" => {
+    if (!thresholdRaw) return "";
+    const blockNum = parseInt(blockHeight, 10);
+    if (isNaN(blockNum) || blockNum <= 0) return "";
+    const encoded = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint256" }],
+      [thresholdRaw, BigInt(blockNum)],
+    );
+    return keccak256(encoded);
+  }, [thresholdRaw, blockHeight]);
+
   const canEstimateGas = Boolean(
     contractsConfigured &&
-    isConnected &&
-    address &&
-    threshold &&
-    blockHeight &&
-    questionId,
+      isConnected &&
+      address &&
+      thresholdRaw &&
+      blockHeight &&
+      questionId,
   );
 
   const gasEstimate = useGasEstimate({
     enabled: canEstimateGas,
-    diamond: address,
+    diamond: CONTRACTS.Diamond,   // #6: was incorrectly passing wallet address
     questionType: QuestionType.DifficultyThreshold,
-    threshold: BigInt(threshold),
-    blockHeight: BigInt(blockHeight),
+    threshold: thresholdRaw ?? 0n,
+    blockHeight: blockHeight ? BigInt(parseInt(blockHeight, 10)) : 0n,
     outcomeSlotCount: BigInt(outcomeSlotCount),
     metadataURI,
     salt: questionId ? keccak256(toHex(questionId)) : undefined,
   });
 
-  // Generate questionId from metadata using ABI encoding
+  // Transaction success — parse event, show modal, invalidate cache
   useEffect(() => {
-    if (threshold && blockHeight) {
-      // Encode metadata using ABI encoding (matches contract expectation)
-      const encodedMetadata = encodeAbiParameters(
-        [{ type: "uint256" }, { type: "uint256" }],
-        [BigInt(threshold), BigInt(blockHeight)],
-      );
-
-      // Generate questionId as keccak256 of the encoded metadata
-      const qId = keccak256(encodedMetadata);
-
-      // DEBUG: Log to see what's being hashed
-      console.log("🔍 DEBUG: Generating questionId");
-      console.log("  Threshold:", threshold);
-      console.log("  Block Height:", blockHeight);
-      console.log("  Encoded Metadata:", encodedMetadata);
-      console.log("  QuestionId:", qId);
-
-      setQuestionId(qId);
-    } else {
-      setQuestionId("");
-    }
-  }, [threshold, blockHeight]);
-
-  // Handle transaction success
-  useEffect(() => {
-    // Always log when this effect runs
-    console.log("🎯 DEBUG: Success useEffect triggered", {
-      isSuccess,
-      receipt: !!receipt,
-      hash: !!hash,
-      address: !!address,
-      questionId,
-    });
-
     if (isSuccess && receipt && hash && address && questionId) {
-      console.log("🚀 DEBUG: Transaction success detected!");
-      console.log("  receipt.logs length:", receipt.logs?.length);
-      console.log("  hash:", hash);
-      console.log("  questionId:", questionId);
-
-      // Generate question string for the condition (from metadata for display)
-      const question = `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`;
-
-      // Try to parse event, but don't fail if it doesn't work
-      let eventConditionId: string;
-      let eventQuestionId: string;
-      let eventOutcomeSlotCount: number;
-      let eventMetadataURI: string;
+      let eventConditionId: string = questionId;
+      let eventQuestionId: string = questionId;
+      let isFallback = false;
 
       try {
         const eventData = parseConditionCreationEvent(receipt as any);
-        console.log("✅ DEBUG: Event parsed successfully:", eventData);
-
         eventConditionId = eventData.conditionId;
         eventQuestionId = eventData.questionId;
-        eventOutcomeSlotCount = Number(eventData.outcomeSlotCount);
-        eventMetadataURI = eventData.metadataURI;
-      } catch (eventError) {
-        console.error(
-          "❌ DEBUG: Event parsing failed, using fallback:",
-          eventError,
-        );
-
-        // FALLBACK: Use questionId as conditionId (this is what the contract does internally)
-        // The conditionId = keccak256(oracle || questionId || outcomeSlotCount)
-        // Since we don't know the oracle address, we'll use the questionId directly
-        // This is a simplification - in production you'd want to query the contract
-        eventConditionId = questionId;
-        eventQuestionId = questionId;
-        eventOutcomeSlotCount = outcomeSlotCount;
-        eventMetadataURI = metadataURI || "";
-
-        console.log(
-          "⚠️ DEBUG: Using fallback IDs - conditionId:",
-          eventConditionId,
-        );
+      } catch {
+        // Event parse failed — fallback to questionId, warn in modal (#20)
+        isFallback = true;
       }
 
       setConditionId(eventConditionId as `0x${string}`);
-      setEventQuestionId(eventQuestionId as `0x${string}`);
-
-      // Save condition to localStorage with event-derived (or fallback) IDs
-      const storedCondition: StoredCondition = {
-        conditionId: eventConditionId,
-        questionId: eventQuestionId,
-        transactionHash: hash,
-        question: question,
-        threshold: threshold,
-        blockHeight: blockHeight,
-        outcomeSlotCount: eventOutcomeSlotCount,
-        timestamp: Date.now(),
-        metadataURI: eventMetadataURI,
-      };
-
-      console.log("💾 DEBUG: About to save condition:", storedCondition);
-      saveConditionToStorage(storedCondition);
-
+      setResolvedQuestionId(eventQuestionId as `0x${string}`);
+      setConditionIdIsFallback(isFallback);
+      // Capture the question text before the form resets (#37)
+      const blockNum = parseInt(blockHeight, 10);
+      setCapturedQuestion(
+        `Will Bitcoin difficulty exceed ${parseFloat(thresholdT).toFixed(2)}T at block ${blockNum.toLocaleString()}?`
+      );
       setShowSuccessModal(true);
       toast.success("Condition created successfully!");
+      invalidateConditions();
     }
-  }, [
-    isSuccess,
-    receipt,
-    hash,
-    address,
-    questionId,
-    threshold,
-    blockHeight,
-    metadataURI,
-  ]);
+  }, [isSuccess, receipt, hash, address, questionId, invalidateConditions]);
 
-  // Handle transaction error
   useEffect(() => {
     if (writeError) {
       toast.error("Transaction failed: " + (writeError as Error).message);
@@ -277,139 +173,80 @@ export default function CreateCondition() {
       toast.error("Please connect your wallet");
       return;
     }
-
     if (!contractsConfigured) {
+      toast.error("Contracts not configured. Please check environment variables.");
+      return;
+    }
+    if (!thresholdRaw) {
+      toast.error("Enter a valid threshold in T (e.g. 145.15)");
+      return;
+    }
+
+    const blockNum = parseInt(blockHeight, 10);
+    if (isNaN(blockNum) || blockNum <= 0) {
+      toast.error("Enter a valid target Bitcoin block height");
+      return;
+    }
+    if (bitcoinBlockHeight > 0 && blockNum <= bitcoinBlockHeight) {
       toast.error(
-        "Contracts not configured. Please deploy contracts and update /src/config/contracts.ts",
+        `Block height must be greater than the current Bitcoin block (${bitcoinBlockHeight.toLocaleString()})`,
       );
       return;
     }
-
-    if (!threshold) {
-      toast.error("Threshold is required");
-      return;
-    }
-
-    // Validate threshold is a positive number
-    const thresholdNum = parseFloat(threshold);
-    if (isNaN(thresholdNum) || thresholdNum <= 0) {
-      toast.error(
-        "Difficulty Threshold must be a numeric value greater than zero",
-      );
-      return;
-    }
-
-    if (!blockHeight) {
-      toast.error("Target block height is required");
-      return;
-    }
-
-    // Validate block height is a positive number and greater than current Bitcoin block
-    const blockHeightNum = parseFloat(blockHeight);
-    if (isNaN(blockHeightNum) || blockHeightNum <= 0) {
-      toast.error("Target Bitcoin Block Height must be a positive number");
-      return;
-    }
-
-    // Check if block height is in the future (strictly greater than current Bitcoin block)
-    if (bitcoinBlockHeight > 0 && blockHeightNum <= bitcoinBlockHeight) {
-      toast.error(
-        `Target Bitcoin Block Height must be greater than current block (${bitcoinBlockHeight.toLocaleString()})`,
-      );
-      return;
-    }
-
     if (!questionId) {
       toast.error("Question ID generation failed");
       return;
     }
 
-    // Show loading indicator while uploading to IPFS
     setIsUploading(true);
-
     try {
-      // Create JSON metadata object
+      const thresholdTNum = parseFloat(thresholdT);
+      const question = `Will Bitcoin difficulty exceed ${thresholdTNum.toFixed(2)}T at block ${blockNum.toLocaleString()}?`;
       const jsonMetadata = {
-        "difficulty-threshold": threshold,
-        "target-block-height": blockHeight,
-        question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
+        "difficulty-threshold": thresholdRaw.toString(),
+        "target-block-height": blockNum.toString(),
+        question,
       };
-
-      // Convert JSON to File object with timestamp for unique filename
-      const timestamp = Date.now();
-
-      // Convert object → JSON string
-      const jsonString = JSON.stringify(jsonMetadata, null, 2);
-
-      // Create Blob
-      const blob = new Blob([jsonString], {
+      const blob = new Blob([JSON.stringify(jsonMetadata, null, 2)], {
         type: "application/json",
       });
-
-      // Create File from Blob
-      const jsonFile = new File([blob], `condition-${timestamp}.json`, {
+      const jsonFile = new File([blob], `condition-${Date.now()}.json`, {
         type: "application/json",
       });
-
-      // Upload to IPFS using Filebase
       const result = await uploadFileToFilebase(jsonFile);
-
-      // Use the returned IPFS URL as metadata URI
-      const ipfsURI = result.url;
-      console.log("📤 DEBUG: IPFS Upload successful:", ipfsURI);
-
-      setMetadataURI(ipfsURI);
-
-      // Show gas estimation modal after successful upload
+      setMetadataURI(result.url);
       setShowGasModal(true);
     } catch (error) {
-      console.error("IPFS upload failed:", error);
       toast.error(
         "Failed to upload metadata to IPFS: " + (error as Error).message,
       );
-      return;
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleConfirmTransaction = async () => {
-    if (!address || !questionId || !threshold || !blockHeight) return;
-
+    if (!address || !questionId || !thresholdRaw || !blockHeight) return;
     try {
       setShowGasModal(false);
-
-      // Encode metadata using ABI encoding
       const metadata = encodeAbiParameters(
         [{ type: "uint256" }, { type: "uint256" }],
-        [BigInt(threshold), BigInt(blockHeight)],
+        [thresholdRaw, BigInt(parseInt(blockHeight, 10))],
       );
-
-      // Generate salt from questionId for uniqueness
       const salt = keccak256(toHex(questionId));
-
-      console.log("📝 DEBUG: Creating condition with metadata");
-      console.log("  QuestionType:", QuestionType.DifficultyThreshold);
-      console.log("  Metadata (encoded):", metadata);
-      console.log("  OutcomeSlotCount:", outcomeSlotCount);
-      console.log("  MetadataURI:", metadataURI);
-      console.log("  Salt:", salt);
-
-      // Call Diamond contract's createConditionWithMetadata
       await writeContract({
         address: CONTRACTS.Diamond,
         abi: DIAMOND_ABI,
         functionName: "createConditionWithMetadata",
         args: [
-          QuestionType.DifficultyThreshold, // questionType: uint8
-          metadata, // metadata: bytes (encoded threshold + blockHeight)
-          outcomeSlotCount, // outcomeSlotCount: uint8
-          metadataURI || "", // metadataURI: string (empty string if not provided)
-          salt, // salt: bytes32
+          QuestionType.DifficultyThreshold,
+          metadata,
+          outcomeSlotCount,
+          metadataURI || "",
+          salt,
         ],
       });
     } catch (err) {
-      console.error("Error creating condition:", err);
       toast.error("Failed to create condition: " + (err as Error).message);
     }
   };
@@ -422,30 +259,27 @@ export default function CreateCondition() {
     return "idle";
   }, [isPending, isConfirming, isSuccess, writeError]);
 
-  // Control TransactionOverlay visibility based on txStatus
   useEffect(() => {
-    if (txStatus !== "idle") {
-      setShowTransactionOverlay(true);
-    } else {
-      setShowTransactionOverlay(false);
-    }
+    setShowTransactionOverlay(txStatus !== "idle");
   }, [txStatus]);
 
-  const metadata =
-    threshold && blockHeight
-      ? {
-          question: `Will Bitcoin mining difficulty exceed ${parseInt(threshold).toLocaleString()} at block ${blockHeight}?`,
-          threshold: threshold,
-          blockHeight: blockHeight,
-          type: "DifficultyThreshold",
-          questionType: QuestionType.DifficultyThreshold,
-        }
-      : null;
+  // Reset form after successful submission so a second condition can be created
+  useEffect(() => {
+    if (isSuccess) {
+      setThresholdT("");
+      setBlockHeight("");
+      setMetadataURI("");
+    }
+  }, [isSuccess]);
+
+  const thresholdTNum = parseFloat(thresholdT) || 0;
+  const blockHeightNum = parseInt(blockHeight, 10) || null;
+  const currentDifficultyT =
+    bitcoinDifficulty > 0 ? bitcoinDifficulty / 1e12 : 0;
 
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
       <div className="max-w-5xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
             Create Binary Condition
@@ -467,7 +301,6 @@ export default function CreateCondition() {
           </div>
         ) : (
           <>
-            {/* Warning Banner - Contracts Not Configured */}
             {!contractsConfigured && (
               <div className="mb-6 p-4 bg-danger/10 border border-danger/30 rounded-xl flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
@@ -475,19 +308,16 @@ export default function CreateCondition() {
                   <p className="text-danger font-semibold mb-1">
                     Contracts Not Configured
                   </p>
-                  <p className="text-sm text-text-secondary mb-2">
-                    Contract addresses are set to zero address. You need to
-                    deploy contracts first and update{" "}
+                  <p className="text-sm text-text-secondary">
+                    Set{" "}
                     <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">
-                      /src/config/contracts.ts
-                    </code>
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    See{" "}
-                    <code className="bg-elevated px-1.5 py-0.5 rounded">
-                      /WEB3_SETUP.md
+                      VITE_DIAMOND_ADDRESS
                     </code>{" "}
-                    for deployment instructions
+                    in your{" "}
+                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">
+                      .env
+                    </code>{" "}
+                    file.
                   </p>
                 </div>
               </div>
@@ -499,23 +329,30 @@ export default function CreateCondition() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Threshold */}
                   <div className="space-y-2">
-                    <Label htmlFor="threshold" className="text-text-primary">
+                    <Label
+                      htmlFor="threshold"
+                      className="text-text-primary font-medium"
+                    >
                       Difficulty Threshold *
                     </Label>
                     <div className="relative">
                       <Input
                         id="threshold"
                         type="number"
+                        step="0.01"
+                        min="0"
                         placeholder={
-                          bitcoinDifficulty?.toString() || "50000000000"
+                          currentDifficultyT > 0
+                            ? (currentDifficultyT * 1.05).toFixed(2)
+                            : "145.15"
                         }
-                        value={threshold}
-                        onChange={(e) => setThreshold(e.target.value)}
-                        className="bg-elevated border-border text-text-primary pr-20 focus:ring-primary focus:border-primary"
+                        value={thresholdT}
+                        onChange={(e) => setThresholdT(e.target.value)}
+                        className="bg-elevated border-border text-text-primary pr-10 focus:ring-primary focus:border-primary"
                         required
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm">
-                        H/s
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm font-medium">
+                        T
                       </span>
                     </div>
                     <p className="text-xs text-text-tertiary">
@@ -524,17 +361,22 @@ export default function CreateCondition() {
                         : difficultyError
                           ? difficultyError
                           : bitcoinDifficultyFormatted
-                            ? `Current difficulty: ${bitcoinDifficultyFormatted} H/s`
+                            ? `Current: ${bitcoinDifficultyFormatted}`
                             : null}
                     </p>
-                    <p className="text-xs text-text-tertiary">
-                      The difficulty value that determines the binary outcome
-                    </p>
+                    {thresholdRaw !== null && (
+                      <p className="text-xs text-text-tertiary font-mono">
+                        = {thresholdRaw.toLocaleString()} (raw on-chain value)
+                      </p>
+                    )}
                   </div>
 
                   {/* Target Block Height */}
                   <div className="space-y-2">
-                    <Label htmlFor="blockHeight" className="text-text-primary">
+                    <Label
+                      htmlFor="blockHeight"
+                      className="text-text-primary font-medium"
+                    >
                       Target Bitcoin Block Height *
                     </Label>
                     <Input
@@ -542,8 +384,8 @@ export default function CreateCondition() {
                       type="number"
                       placeholder={
                         bitcoinBlockHeight > 0
-                          ? bitcoinBlockHeight.toString()
-                          : "875000"
+                          ? (bitcoinBlockHeight + 2016).toString()
+                          : "940000"
                       }
                       value={blockHeight}
                       onChange={(e) => setBlockHeight(e.target.value)}
@@ -567,10 +409,6 @@ export default function CreateCondition() {
                           {bitcoinError}
                         </p>
                       )}
-                      <p className="text-xs text-text-tertiary">
-                        Note: This is Bitcoin block height. The contract will
-                        validate this on-chain.
-                      </p>
                     </div>
                   </div>
 
@@ -586,7 +424,6 @@ export default function CreateCondition() {
                     </div>
                   )}
 
-                  {/* Submit Button */}
                   <Button
                     type="submit"
                     className="w-full bg-primary hover:bg-primary/90 text-primary-foreground transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
@@ -606,105 +443,58 @@ export default function CreateCondition() {
                 </form>
               </div>
 
-              {/* Live Preview */}
-              <div className="bg-surface border border-border rounded-xl p-6 md:p-8 h-fit sticky top-24">
-                <h3 className="text-lg font-semibold mb-4">Live Preview</h3>
-                {metadata ? (
-                  <div className="space-y-4">
-                    <div className="p-4 bg-elevated rounded-lg border border-border">
-                      <p className="text-sm text-text-secondary mb-1">
-                        Question
-                      </p>
-                      <p className="text-text-primary font-medium">
-                        {metadata.question}
-                      </p>
-                    </div>
-                    <div className="p-4 bg-elevated rounded-lg border border-border">
-                      <p className="text-sm text-text-secondary mb-2">
-                        Encoded Metadata (ABI)
-                      </p>
-                      <pre className="text-xs text-text-tertiary font-mono overflow-x-auto">
-                        {encodeAbiParameters(
-                          [{ type: "uint256" }, { type: "uint256" }],
-                          [BigInt(threshold), BigInt(blockHeight)],
-                        )}
-                      </pre>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="p-3 bg-success/10 border border-success/30 rounded-lg">
-                        <p className="text-xs text-text-secondary mb-1">
-                          YES Outcome
-                        </p>
-                        <p className="text-sm font-medium text-success">
-                          ≥ {parseInt(threshold).toLocaleString()}
-                        </p>
-                      </div>
-                      <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg">
-                        <p className="text-xs text-text-secondary mb-1">
-                          NO Outcome
-                        </p>
-                        <p className="text-sm font-medium text-danger">
-                          &lt;{parseInt(threshold).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="text-center py-12">
-                    <p className="text-text-tertiary">
-                      Fill in the form to see a preview
-                    </p>
-                  </div>
-                )}
-              </div>
+              {/* Strike Preview */}
+              <StrikePreview
+                thresholdT={thresholdTNum > 0 ? thresholdTNum : null}
+                blockHeight={blockHeightNum}
+                currentDifficulty={bitcoinDifficulty}
+                currentBtcBlock={bitcoinBlockHeight}
+              />
             </div>
           </>
         )}
       </div>
 
-      {/* Transaction Overlay */}
       <TransactionOverlay
         isOpen={showTransactionOverlay}
-        status={txStatus}
+        status={txStatus as any}
         txHash={hash}
-        onClose={() => {
-          console.log(
-            "[DEBUG] TransactionOverlay onClose called, closing overlay",
-          );
-          setShowTransactionOverlay(false);
+        onClose={() => setShowTransactionOverlay(false)}
+        onRetry={() => {
+          // #36: if IPFS already uploaded, skip re-upload and go straight to gas modal
+          if (metadataURI) {
+            setShowGasModal(true);
+          } else {
+            handleSubmit({ preventDefault: () => {} } as React.FormEvent);
+          }
         }}
-        onRetry={() =>
-          handleSubmit({ preventDefault: () => {} } as React.FormEvent)
-        }
       />
 
-      {/* Success Modal */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="bg-elevated border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl text-text-primary">
-              Condition Created Successfully! 🎉
+              Condition Created Successfully!
             </DialogTitle>
             <DialogDescription className="text-text-secondary">
-              Your condition has been created on-chain
+              Your condition has been created on-chain. It will appear in the
+              markets list within ~30 seconds once indexed.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Condition ID */}
             <div className="space-y-2">
-              <Label className="text-text-secondary text-sm">
-                Condition ID
-              </Label>
+              <Label className="text-text-secondary text-sm">Condition ID</Label>
+              {conditionIdIsFallback && (
+                <p className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1">
+                  Could not read conditionId from receipt — copy from the transaction logs on Basescan.
+                </p>
+              )}
               <CopyableHash hash={conditionId} />
             </div>
-
-            {/* Question ID - Event Derived */}
             <div className="space-y-2">
               <Label className="text-text-secondary text-sm">Question ID</Label>
-              <CopyableHash hash={eventQuestionId} />
+              <CopyableHash hash={resolvedQuestionId} />
             </div>
-
-            {/* Transaction Hash */}
             {hash && (
               <div className="space-y-2">
                 <Label className="text-text-secondary text-sm">
@@ -723,13 +513,10 @@ export default function CreateCondition() {
                 </div>
               </div>
             )}
-
-            {/* Question Preview */}
             <div className="p-4 bg-background border border-border rounded-lg">
-              <p className="text-sm text-text-primary">{metadata?.question}</p>
+              <p className="text-sm text-text-primary">{capturedQuestion}</p>
             </div>
           </div>
-
           <div className="flex gap-3">
             <Button
               variant="outline"
@@ -751,7 +538,6 @@ export default function CreateCondition() {
         </DialogContent>
       </Dialog>
 
-      {/* Gas Estimation Modal */}
       <GasEstimationModal
         open={showGasModal}
         onOpenChange={setShowGasModal}

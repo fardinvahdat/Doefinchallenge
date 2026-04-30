@@ -7,27 +7,14 @@ interface BitcoinDifficulty {
   error: string | null;
 }
 
-/**
- * Format difficulty in a human-readable way
- * Difficulty is typically shown as large numbers like "100 trillion" or scientific notation
- */
 function formatDifficulty(difficulty: number): string {
-  if (difficulty >= 1e12) {
-    return `${(difficulty / 1e12).toFixed(2)}T`;
-  } else if (difficulty >= 1e9) {
-    return `${(difficulty / 1e9).toFixed(2)}B`;
-  } else if (difficulty >= 1e6) {
-    return `${(difficulty / 1e6).toFixed(2)}M`;
-  } else if (difficulty >= 1e3) {
-    return `${(difficulty / 1e3).toFixed(2)}K`;
-  }
+  if (difficulty >= 1e12) return `${(difficulty / 1e12).toFixed(2)}T`;
+  if (difficulty >= 1e9) return `${(difficulty / 1e9).toFixed(2)}B`;
+  if (difficulty >= 1e6) return `${(difficulty / 1e6).toFixed(2)}M`;
+  if (difficulty >= 1e3) return `${(difficulty / 1e3).toFixed(2)}K`;
   return difficulty.toFixed(2);
 }
 
-/**
- * Hook to fetch the current Bitcoin mining difficulty from a public API
- * Uses multiple fallbacks for reliability
- */
 export function useBitcoinDifficulty(): BitcoinDifficulty {
   const [state, setState] = useState<BitcoinDifficulty>({
     difficulty: 0,
@@ -40,7 +27,6 @@ export function useBitcoinDifficulty(): BitcoinDifficulty {
     let mounted = true;
 
     const fetchBitcoinDifficulty = async () => {
-      // Try multiple Bitcoin API endpoints
       const apis = [
         {
           url: "https://blockstream.info/api/blocks/tip/difficulty",
@@ -56,31 +42,18 @@ export function useBitcoinDifficulty(): BitcoinDifficulty {
         },
       ];
 
-      let lastError: Error | null = null;
-
       for (const api of apis) {
         try {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
-
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
           const response = await fetch(api.url, {
             signal: controller.signal,
-            headers: {
-              Accept: "application/json",
-            },
+            headers: { Accept: "application/json" },
           });
-
           clearTimeout(timeoutId);
-
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-
-          const text = await response.text();
-          const difficulty = api.parser(text);
-
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const difficulty = api.parser(await response.text());
           if (mounted && difficulty > 0) {
-            console.log("🔍 DEBUG: Fetched Bitcoin difficulty:", difficulty);
             setState({
               difficulty,
               formatted: formatDifficulty(difficulty),
@@ -89,34 +62,23 @@ export function useBitcoinDifficulty(): BitcoinDifficulty {
             });
             return;
           }
-        } catch (error) {
-          lastError = error as Error;
-          console.warn(`Failed to fetch from ${api.url}:`, error);
-          continue; // Try next API
+        } catch {
+          continue;
         }
       }
 
-      // All APIs failed
       if (mounted) {
-        console.error(
-          "❌ DEBUG: All Bitcoin difficulty APIs failed:",
-          lastError,
-        );
         setState({
           difficulty: 0,
           formatted: "",
           loading: false,
-          error:
-            "Unable to fetch Bitcoin difficulty. Please check your internet connection.",
+          error: "Unable to fetch Bitcoin difficulty.",
         });
       }
     };
 
     fetchBitcoinDifficulty();
-
-    // Refresh every 60 seconds
-    const interval = setInterval(fetchBitcoinDifficulty, 60000);
-
+    const interval = setInterval(fetchBitcoinDifficulty, 60_000);
     return () => {
       mounted = false;
       clearInterval(interval);

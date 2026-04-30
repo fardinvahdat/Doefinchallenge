@@ -5,14 +5,13 @@ export const CONTRACTS = {
   ConditionalTokens: (import.meta.env.VITE_CONDITIONAL_TOKENS_ADDRESS ||
     "0x3F84bEf67EA2B582a3d0a4f6f6B15776F12342c9") as Address,
   Diamond: (import.meta.env.VITE_DIAMOND_ADDRESS ||
-    "0x75ed83f1fd159050E1ed546C1A584ac2c9deE225") as Address,
+    "0xb05a5f3272F83BB748CcDA59c71Ac197dfA60F17") as Address,
   mBTC: (import.meta.env.VITE_MBTC_ADDRESS ||
     "0x324c4A1e28760bCC45cDE980D36A78C971653228") as Address,
   mUSDC: (import.meta.env.VITE_MUSDC_ADDRESS ||
     "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba") as Address,
 } as const;
 
-// ERC20 ABI for token approvals and balances
 export const ERC20_ABI = [
   {
     inputs: [
@@ -57,7 +56,6 @@ export const ERC20_ABI = [
   },
 ] as const;
 
-// Conditional Tokens ABI
 export const CONDITIONAL_TOKENS_ABI = [
   {
     inputs: [
@@ -149,76 +147,59 @@ export const CONDITIONAL_TOKENS_ABI = [
   },
 ] as const;
 
-// Diamond ABI for various facets
-// Includes: ConditionManagerFacet, PositionFacet, GettersFacet
+// Diamond ABI — extracted from doefin-frontend contracts/doefin/v3/generated/diamond.ts
+// Covers: ConditionManagerFacet, PositionFacet, GettersFacet
 const DIAMOND_FULL_ABI = [
   // ConditionManagerFacet
   {
     inputs: [
-      { name: "questionType", type: "uint8" },
-      { name: "metadata", type: "bytes" },
-      { name: "outcomeSlotCount", type: "uint8" },
-      { name: "metadataURI", type: "string" },
-      { name: "salt", type: "bytes32" },
+      { internalType: "enum LibDoefinStorage.QuestionType", name: "questionType", type: "uint8" },
+      { internalType: "bytes", name: "metadata", type: "bytes" },
+      { internalType: "uint8", name: "outcomeSlotCount", type: "uint8" },
+      { internalType: "string", name: "metadataURI", type: "string" },
+      { internalType: "bytes32", name: "salt", type: "bytes32" },
     ],
     name: "createConditionWithMetadata",
-    outputs: [{ name: "conditionId", type: "bytes32" }],
+    outputs: [
+      { internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { internalType: "bytes32", name: "questionId", type: "bytes32" },
+    ],
     stateMutability: "nonpayable",
     type: "function",
   },
+  // getConditionId overload 1 — by oracle + questionId + outcomeSlotCount
   {
     inputs: [
-      { name: "oracle", type: "address" },
-      { name: "questionId", type: "bytes32" },
-      { name: "outcomeSlotCount", type: "uint8" },
+      { internalType: "address", name: "oracle", type: "address" },
+      { internalType: "bytes32", name: "questionId", type: "bytes32" },
+      { internalType: "uint8", name: "outcomeSlotCount", type: "uint8" },
     ],
     name: "getConditionId",
-    outputs: [{ name: "", type: "bytes32" }],
+    outputs: [{ internalType: "bytes32", name: "", type: "bytes32" }],
     stateMutability: "pure",
     type: "function",
   },
+  // getConditionId overload 2 — by positionId
   {
-    inputs: [
-      {
-        internalType: "bytes32",
-        name: "conditionId",
-        type: "bytes32",
-      },
-    ],
+    inputs: [{ internalType: "uint256", name: "positionId", type: "uint256" }],
+    name: "getConditionId",
+    outputs: [{ internalType: "bytes32", name: "conditionId", type: "bytes32" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // getCondition — field order: questionId, metadataURI, oracle, outcomeSlotCount, active, creator
+  {
+    inputs: [{ internalType: "bytes32", name: "conditionId", type: "bytes32" }],
     name: "getCondition",
     outputs: [
       {
         components: [
-          {
-            internalType: "address",
-            name: "oracle",
-            type: "address",
-          },
-          {
-            internalType: "bytes32",
-            name: "questionId",
-            type: "bytes32",
-          },
-          {
-            internalType: "uint8",
-            name: "outcomeSlotCount",
-            type: "uint8",
-          },
-          {
-            internalType: "string",
-            name: "metadataURI",
-            type: "string",
-          },
-          {
-            internalType: "bool",
-            name: "active",
-            type: "bool",
-          },
-          {
-            internalType: "address",
-            name: "creator",
-            type: "address",
-          },
+          { internalType: "bytes32", name: "questionId", type: "bytes32" },
+          { internalType: "string", name: "metadataURI", type: "string" },
+          { internalType: "address", name: "oracle", type: "address" },
+          { internalType: "uint8", name: "outcomeSlotCount", type: "uint8" },
+          { internalType: "bool", name: "active", type: "bool" },
+          { internalType: "address", name: "creator", type: "address" },
         ],
         internalType: "struct LibDoefinStorage.Condition",
         name: "",
@@ -228,96 +209,124 @@ const DIAMOND_FULL_ABI = [
     stateMutability: "view",
     type: "function",
   },
-  // getPayoutNumerators function - checks if condition is prepared
   {
-    inputs: [{ name: "conditionId", type: "bytes32" }],
+    inputs: [{ internalType: "bytes32", name: "conditionId", type: "bytes32" }],
     name: "getPayoutNumerators",
-    outputs: [{ name: "", type: "uint256[]" }],
+    outputs: [{ internalType: "uint256[]", name: "", type: "uint256[]" }],
     stateMutability: "view",
     type: "function",
   },
-  // isAllowedCollateral function - checks if collateral token is allowed
   {
-    inputs: [{ name: "token", type: "address" }],
+    inputs: [{ internalType: "address", name: "token", type: "address" }],
     name: "isAllowedCollateral",
-    outputs: [{ name: "", type: "bool" }],
+    outputs: [{ internalType: "bool", name: "", type: "bool" }],
     stateMutability: "view",
     type: "function",
   },
-  // getCollateralUnit function - gets the collateral unit for a token
+  // getCollateralUnit overload 1 — by token address
   {
-    inputs: [{ name: "token", type: "address" }],
+    inputs: [{ internalType: "address", name: "token", type: "address" }],
     name: "getCollateralUnit",
-    outputs: [{ name: "", type: "uint256" }],
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "view",
     type: "function",
   },
-  // splitPosition function
+  // getCollateralUnit overload 2 — by positionId
+  {
+    inputs: [{ internalType: "uint256", name: "positionId", type: "uint256" }],
+    name: "getCollateralUnit",
+    outputs: [{ internalType: "uint256", name: "unit", type: "uint256" }],
+    stateMutability: "view",
+    type: "function",
+  },
+  // PositionFacet
   {
     inputs: [
-      { name: "collateralToken", type: "address" },
-      { name: "parentCollectionId", type: "bytes32" },
-      { name: "conditionId", type: "bytes32" },
-      { name: "partition", type: "uint256[]" },
-      { name: "amount", type: "uint256" },
+      { internalType: "address", name: "collateralToken", type: "address" },
+      { internalType: "bytes32", name: "parentCollectionId", type: "bytes32" },
+      { internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { internalType: "uint256[]", name: "partition", type: "uint256[]" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
     ],
     name: "splitPosition",
     outputs: [],
     stateMutability: "nonpayable",
     type: "function",
   },
-  // getCollectionId function
   {
     inputs: [
-      { name: "parentCollectionId", type: "bytes32" },
-      { name: "conditionId", type: "bytes32" },
-      { name: "indexSet", type: "uint256" },
+      { internalType: "address", name: "collateralToken", type: "address" },
+      { internalType: "bytes32", name: "parentCollectionId", type: "bytes32" },
+      { internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { internalType: "uint256[]", name: "partition", type: "uint256[]" },
+      { internalType: "uint256", name: "amount", type: "uint256" },
+    ],
+    name: "mergePositions",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  {
+    inputs: [
+      { internalType: "address", name: "collateralToken", type: "address" },
+      { internalType: "bytes32", name: "parentCollectionId", type: "bytes32" },
+      { internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { internalType: "uint256[]", name: "indexSets", type: "uint256[]" },
+    ],
+    name: "redeemPositions",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
+  // GettersFacet
+  {
+    inputs: [
+      { internalType: "bytes32", name: "parentCollectionId", type: "bytes32" },
+      { internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { internalType: "uint256", name: "indexSet", type: "uint256" },
     ],
     name: "getCollectionId",
-    outputs: [{ name: "", type: "bytes32" }],
+    outputs: [{ internalType: "bytes32", name: "", type: "bytes32" }],
     stateMutability: "view",
     type: "function",
   },
-  // getPositionId function
   {
     inputs: [
-      { name: "collateralToken", type: "address" },
-      { name: "collectionId", type: "bytes32" },
+      { internalType: "address", name: "collateralToken", type: "address" },
+      { internalType: "bytes32", name: "collectionId", type: "bytes32" },
     ],
     name: "getPositionId",
-    outputs: [{ name: "", type: "uint256" }],
+    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
     stateMutability: "pure",
     type: "function",
   },
-  // ConditionCreated event
+  // Events
   {
     anonymous: false,
     inputs: [
-      { indexed: true, name: "conditionId", type: "bytes32" },
-      { indexed: true, name: "oracle", type: "address" },
-      { indexed: true, name: "questionId", type: "bytes32" },
-      { indexed: false, name: "outcomeSlotCount", type: "uint8" },
-      { indexed: false, name: "metadataURI", type: "string" },
-      { indexed: false, name: "creator", type: "address" },
+      { indexed: true, internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { indexed: true, internalType: "address", name: "oracle", type: "address" },
+      { indexed: true, internalType: "bytes32", name: "questionId", type: "bytes32" },
+      { indexed: false, internalType: "uint8", name: "outcomeSlotCount", type: "uint8" },
+      { indexed: false, internalType: "string", name: "metadataURI", type: "string" },
+      { indexed: false, internalType: "address", name: "creator", type: "address" },
     ],
     name: "ConditionCreated",
     type: "event",
   },
-  // PositionSplit event
   {
     anonymous: false,
     inputs: [
-      { indexed: true, name: "stakeholder", type: "address" },
-      { indexed: true, name: "collateralToken", type: "address" },
-      { indexed: true, name: "parentCollectionId", type: "bytes32" },
-      { indexed: false, name: "conditionId", type: "bytes32" },
-      { indexed: false, name: "partition", type: "uint256[]" },
-      { indexed: false, name: "amount", type: "uint256" },
+      { indexed: true, internalType: "address", name: "stakeholder", type: "address" },
+      { indexed: true, internalType: "address", name: "collateralToken", type: "address" },
+      { indexed: true, internalType: "bytes32", name: "parentCollectionId", type: "bytes32" },
+      { indexed: false, internalType: "bytes32", name: "conditionId", type: "bytes32" },
+      { indexed: false, internalType: "uint256[]", name: "partition", type: "uint256[]" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
     ],
     name: "PositionSplit",
     type: "event",
   },
 ] as const;
 
-// Re-export the full diamond ABI
 export { DIAMOND_FULL_ABI as DIAMOND_ABI };

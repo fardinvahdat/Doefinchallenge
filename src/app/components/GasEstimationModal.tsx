@@ -1,4 +1,4 @@
-import { AlertCircle, Fuel, TrendingUp, Clock } from "lucide-react";
+import { AlertCircle, Fuel, TrendingUp, TrendingDown, Clock } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -162,14 +162,20 @@ export function GasEstimationModal({
             ) : (
               <>
                 {/* Main Cost Display */}
+                {(() => {
+                  const gasPriceGwei = Number(formatGwei(gasPrice));
+                  const gasLevel = gasPriceGwei < 1 ? "Low" : gasPriceGwei < 10 ? "Medium" : "High";
+                  const GasIcon = gasPriceGwei < 10 ? TrendingUp : TrendingDown;
+                  const gasColor = gasPriceGwei < 1 ? "text-success" : gasPriceGwei < 10 ? "text-accent" : "text-danger";
+                  return (
                 <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-sm text-text-secondary">
                       Estimated Cost
                     </span>
                     <div className="flex items-center gap-2">
-                      <TrendingUp className="h-4 w-4 text-success" />
-                      <span className="text-xs text-success">Low</span>
+                      <GasIcon className={`h-4 w-4 ${gasColor}`} />
+                      <span className={`text-xs ${gasColor}`}>{gasLevel}</span>
                     </div>
                   </div>
                   <div className="flex items-baseline gap-2">
@@ -182,6 +188,8 @@ export function GasEstimationModal({
                     ≈ {parseFloat(estimatedCostEth).toFixed(6)} ETH
                   </p>
                 </div>
+                  );
+                })()}
 
                 {/* Gas Details Grid */}
                 <div className="grid grid-cols-2 gap-3">

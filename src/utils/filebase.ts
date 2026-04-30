@@ -32,24 +32,19 @@ export async function uploadFileToFilebase(
 
     // For single file: result.Hash is the CID
     const cid = result.Hash;
+    // CIDv0: Qm + 44 base58 chars (46 total)
+    // CIDv1: bafy + 55+ base32 chars (59+ total); use loose lower-bound of 52 chars after prefix
     if (
       !cid ||
-      !/^Qm[1-9A-HJ-NP-Za-km-z]{44}$|^bafybei[A-Za-z0-9]{44}$/.test(cid)
+      !/^(Qm[1-9A-HJ-NP-Za-km-z]{44}|bafy[A-Za-z0-9]{52,})$/.test(cid)
     ) {
       throw new Error(`Invalid CID from RPC: ${cid}`);
     }
 
     const url = `https://ipfs.filebase.io/ipfs/${cid}`;
 
-    console.log("📤 IPFS RPC Upload successful:", {
-      cid,
-      url,
-      name: result.Name,
-    });
-
     return { cid, url };
   } catch (error) {
-    console.error("Upload error details:", error);
     throw new Error(
       `File upload failed: ${
         error instanceof Error ? error.message : "Unknown error"

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Loader2,
   ExternalLink,
@@ -109,6 +110,17 @@ export function TransactionOverlay({
 
   const config = getStatusConfig();
 
+  // #35: after 5 minutes with no resolution, show an escape button so users aren't trapped
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    if (!isOpen || config.showClose) {
+      setTimedOut(false);
+      return;
+    }
+    const t = setTimeout(() => setTimedOut(true), 5 * 60 * 1000);
+    return () => clearTimeout(t);
+  }, [isOpen, config.showClose]);
+
   return (
     <Dialog open={isOpen} onOpenChange={config.showClose ? onClose : undefined}>
       <DialogContent
@@ -185,6 +197,22 @@ export function TransactionOverlay({
             >
               Close
             </Button>
+          )}
+
+          {timedOut && !config.showClose && onClose && (
+            <div className="w-full p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <p className="text-xs text-yellow-300 mb-2 text-center">
+                Taking longer than expected
+              </p>
+              <Button
+                onClick={onClose}
+                variant="outline"
+                size="sm"
+                className="w-full border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/10"
+              >
+                Close and check wallet
+              </Button>
+            </div>
           )}
         </div>
       </DialogContent>

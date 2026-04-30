@@ -1,19 +1,10 @@
 import { Button } from "../components/ui/button";
 import { ArrowRight, TrendingUp, Shield, Zap, BarChart3 } from "lucide-react";
 import { Link } from "react-router";
-import { useHistoricalEvents } from "../../hooks/useContractEvents";
-import { useMemo } from "react";
+import { useConditions } from "../../hooks/useConditions";
 
 export default function Home() {
-  const { events, isLoading } = useHistoricalEvents();
-
-  const stats = useMemo(() => {
-    const activeMarkets = events.filter((e) => e.type === "ConditionPreparation").length;
-    return {
-      activeMarkets,
-      collaterals: 2, // mBTC and mUSDC
-    };
-  }, [events]);
+  const { totalCount, isLoading } = useConditions("all");
 
   return (
     <div className="container mx-auto px-4 lg:px-8">
@@ -47,12 +38,12 @@ export default function Home() {
           <div className="grid grid-cols-3 gap-4 max-w-2xl mx-auto py-6 animate-in fade-in slide-in-from-bottom-6 duration-700 delay-300">
             <div className="text-center">
               <div className="text-2xl md:text-3xl font-bold text-primary">
-                {isLoading ? "..." : stats.activeMarkets}
+                {isLoading ? "..." : totalCount}
               </div>
-              <div className="text-xs md:text-sm text-text-tertiary">Active Markets</div>
+              <div className="text-xs md:text-sm text-text-tertiary">Conditions</div>
             </div>
             <div className="text-center border-x border-border">
-              <div className="text-2xl md:text-3xl font-bold text-accent">{stats.collaterals}</div>
+              <div className="text-2xl md:text-3xl font-bold text-accent">2</div>
               <div className="text-xs md:text-sm text-text-tertiary">Collaterals</div>
             </div>
             <div className="text-center">

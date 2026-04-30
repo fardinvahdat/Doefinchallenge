@@ -15,10 +15,6 @@ export default function NetworkNotification({
 }: NetworkNotificationProps) {
   const { chains, switchChain, isPending } = useSwitchChain();
 
-  // Debug logging
-  console.log('[NetworkNotification] Rendering, isVisible:', isVisible);
-  console.log('[NetworkNotification] chains:', chains.map(c => c.id));
-
   if (!isVisible) return null;
 
   const handleSwitchNetwork = () => {
