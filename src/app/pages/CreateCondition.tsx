@@ -428,16 +428,28 @@ export default function CreateCondition() {
                           { label: "Next epoch (~2 wks)", blocks: 2016 },
                           { label: "+1 Month", blocks: 4320 },
                           { label: "+3 Months", blocks: 12960 },
-                        ].map(({ label, blocks }) => (
-                          <button
-                            key={blocks}
-                            type="button"
-                            onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
-                            className="text-xs px-2 py-1 rounded border border-border bg-elevated hover:border-primary/50 hover:bg-primary/5 text-text-secondary hover:text-text-primary transition-colors"
-                          >
-                            {label}
-                          </button>
-                        ))}
+                        ].map(({ label, blocks }) => {
+                          const isActive = blockHeight === (bitcoinBlockHeight + blocks).toString();
+                          return (
+                            <button
+                              key={blocks}
+                              type="button"
+                              onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
+                              className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all duration-150 flex items-center gap-1.5 ${
+                                isActive
+                                  ? "bg-primary/15 text-primary"
+                                  : "border-border bg-elevated text-text-secondary hover:bg-primary/5 hover:text-primary"
+                              }`}
+                              style={isActive ? {
+                                borderColor: "var(--primary)",
+                                boxShadow: "0 0 0 1px var(--primary)",
+                              } : undefined}
+                              aria-pressed={isActive}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                     <Input
@@ -450,7 +462,15 @@ export default function CreateCondition() {
                       }
                       value={blockHeight}
                       onChange={(e) => setBlockHeight(e.target.value)}
-                      className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
+                      className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
+                      style={
+                        bitcoinBlockHeight > 0 &&
+                        [2016, 4320, 12960].some(
+                          (b) => blockHeight === (bitcoinBlockHeight + b).toString()
+                        )
+                          ? { borderColor: "var(--primary)" }
+                          : undefined
+                      }
                       aria-describedby="blockheight-helper"
                       required
                     />
