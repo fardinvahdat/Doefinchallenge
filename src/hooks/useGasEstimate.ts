@@ -356,7 +356,20 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
                 abi: DIAMOND_ABI,
                 data: err.data,
               });
-              errorMessage = `Contract Error: ${decodedError.errorName || "Unknown"}`;
+              const name = decodedError.errorName || "Unknown";
+              if (name === "NotMarketMaker") {
+                errorMessage =
+                  "Your wallet is not authorized to create conditions. Contact the Doefin team to get your address whitelisted as a market maker.";
+              } else if (
+                name === "ConditionAlreadyPrepared" ||
+                name === "OracleAdapter_QuestionAlreadyExists"
+              ) {
+                errorMessage =
+                  "This condition already exists. Try different threshold or block height values.";
+                setConditionExists(true);
+              } else {
+                errorMessage = `Contract error: ${name}`;
+              }
             } catch {
               // Couldn't decode, try ConditionalTokens ABI
               try {
@@ -364,31 +377,36 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
                   abi: CONDITIONAL_TOKENS_ABI,
                   data: err.data,
                 });
-                errorMessage = `Contract Error: ${decodedError.errorName || "Unknown"}`;
+                errorMessage = `Contract error: ${decodedError.errorName || "Unknown"}`;
               } catch {
                 // Couldn't decode at all
               }
             }
           }
 
-          // Check for common error patterns
-          if (
-            err.message?.includes("0xa9ad62f8") ||
-            err.message?.includes("already prepared")
-          ) {
-            errorMessage =
-              "This condition already exists. Try different threshold or block height values.";
-            setConditionExists(true);
-          } else if (err.message?.includes("execution reverted")) {
-            errorMessage =
-              "Transaction would fail: Contract execution reverted. The condition may already exist or parameters are invalid.";
-          } else if (err.message?.includes("insufficient funds")) {
-            errorMessage =
-              "Insufficient funds for gas. Please add test ETH from a Base Sepolia faucet.";
-          } else if (err.message?.includes("nonce")) {
-            errorMessage = "Transaction nonce issue. Try refreshing the page.";
-          } else if (err.shortMessage) {
-            errorMessage = err.shortMessage;
+          // Pattern-match on raw message only when ABI decode didn't give a specific message
+          if (errorMessage === "Failed to estimate gas") {
+            if (
+              err.message?.includes("0xa9ad62f8") ||
+              err.message?.includes("already prepared")
+            ) {
+              errorMessage =
+                "This condition already exists. Try different threshold or block height values.";
+              setConditionExists(true);
+            } else if (err.message?.includes("0x67ca592f") || err.message?.includes("NotMarketMaker")) {
+              errorMessage =
+                "Your wallet is not authorized to create conditions. Contact the Doefin team to get your address whitelisted as a market maker.";
+            } else if (err.message?.includes("execution reverted")) {
+              errorMessage =
+                "Transaction would fail: Contract execution reverted. The condition may already exist or parameters are invalid.";
+            } else if (err.message?.includes("insufficient funds")) {
+              errorMessage =
+                "Insufficient funds for gas. Please add test ETH from a Base Sepolia faucet.";
+            } else if (err.message?.includes("nonce")) {
+              errorMessage = "Transaction nonce issue. Try refreshing the page.";
+            } else if (err.shortMessage) {
+              errorMessage = err.shortMessage;
+            }
           }
 
           setError(errorMessage);

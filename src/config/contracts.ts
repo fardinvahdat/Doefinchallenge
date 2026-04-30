@@ -300,6 +300,18 @@ const DIAMOND_FULL_ABI = [
     stateMutability: "pure",
     type: "function",
   },
+  // Custom errors
+  { type: "error", name: "NotMarketMaker", inputs: [] },
+  { type: "error", name: "ConditionAlreadyPrepared", inputs: [] },
+  { type: "error", name: "OracleAdapter_QuestionAlreadyExists", inputs: [] },
+  { type: "error", name: "InvalidOutcomeSlotCount", inputs: [] },
+  { type: "error", name: "TooManyOutcomeSlots", inputs: [] },
+  { type: "error", name: "ConditionDoesNotExist", inputs: [] },
+  { type: "error", name: "ConditionNotActive", inputs: [] },
+  { type: "error", name: "ZeroAddress", inputs: [] },
+  { type: "error", name: "ZeroAmount", inputs: [] },
+  { type: "error", name: "InvalidOracleAddress", inputs: [] },
+  { type: "error", name: "ValueOutOfRange", inputs: [] },
   // Events
   {
     anonymous: false,
