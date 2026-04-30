@@ -186,7 +186,7 @@ export default function Markets() {
             <Button
               onClick={() => navigate("/create-condition")}
               variant="outline"
-              className="bg-elevated border-border hover:bg-elevated/80"
+              className="bg-elevated/60 border-border hover:bg-elevated !text-white/80"
             >
               New Prediction
             </Button>

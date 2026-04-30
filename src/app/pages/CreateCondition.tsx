@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Loader2, ExternalLink, AlertTriangle, Info } from "lucide-react";
+import { Loader2, ExternalLink, AlertTriangle, Info, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -290,11 +290,10 @@ export default function CreateCondition() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl md:text-4xl font-bold mb-2">
-            Create Binary Condition
+            Make a Bitcoin Prediction
           </h1>
           <p className="text-text-secondary text-lg">
-            Define a difficulty threshold condition for Bitcoin mining
-            prediction markets
+            Set up a yes/no question — the blockchain verifies the answer automatically
           </p>
         </div>
 
@@ -312,239 +311,277 @@ export default function CreateCondition() {
           </div>
         ) : (
           <>
-              {/* CC-01: Onboarding callout */}
-            <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-xl">
-              <h3 className="text-sm font-semibold text-text-primary mb-1">What is a Condition?</h3>
-              <p className="text-xs text-text-secondary">
-                A condition is a yes/no question about Bitcoin's mining difficulty. You set a
-                threshold value and a target block number. When that block is mined, the answer
-                is determined automatically by the blockchain. You and others can then bet YES or
-                NO by splitting tokens based on this outcome.
-              </p>
-            </div>
-
-          {!contractsConfigured && (
+            {!contractsConfigured && (
               <div className="mb-6 p-4 bg-danger/10 border border-danger/30 rounded-xl flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-danger font-semibold mb-1">
-                    Contracts Not Configured
-                  </p>
+                  <p className="text-danger font-semibold mb-1">Contracts Not Configured</p>
                   <p className="text-sm text-text-secondary">
                     Set{" "}
-                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">
-                      VITE_DIAMOND_ADDRESS
-                    </code>{" "}
-                    in your{" "}
-                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">
-                      .env
-                    </code>{" "}
-                    file.
+                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">VITE_DIAMOND_ADDRESS</code>
+                    {" "}in your{" "}
+                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded">.env</code> file.
                   </p>
                 </div>
               </div>
             )}
             <NetworkMonitor />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* Form */}
-              <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
-                <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Threshold */}
-                  <div className="space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Label
-                        htmlFor="threshold"
-                        className="text-text-primary font-medium"
-                      >
-                        Difficulty Threshold *
-                      </Label>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="h-4 w-4 text-text-tertiary cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                          <p>
-                            Difficulty measures how hard it is to mine Bitcoin blocks.
-                            "T" = trillions of units. Set higher than current if you
-                            predict mining will get harder.
+
+            {/* Steps + Preview layout */}
+            <form onSubmit={handleSubmit}>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+                {/* Left: 3-step flow */}
+                <div className="space-y-4">
+
+                  {/* ── Step 1 ── */}
+                  {(() => {
+                    const done = thresholdRaw !== null && thresholdTNum > 0;
+                    return (
+                      <div className="bg-surface border border-border rounded-xl p-6">
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm transition-colors ${done ? "bg-success text-background" : "bg-primary text-primary-foreground"}`}>
+                            {done ? <Check className="h-4 w-4" /> : "1"}
+                          </div>
+                          <div>
+                            <h2 className="font-semibold text-text-primary leading-tight">Pick your difficulty number</h2>
+                            <p className="text-xs text-text-secondary mt-0.5">How hard do you think Bitcoin mining will be?</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <p className="text-sm text-text-secondary">
+                            {difficultyLoading
+                              ? "Loading current difficulty…"
+                              : bitcoinDifficultyFormatted
+                                ? <>Bitcoin mining is currently <span className="text-text-primary font-medium">{bitcoinDifficultyFormatted}</span>. You're predicting it will be <span className="text-text-primary font-medium">above</span> this number:</>
+                                : "Enter a difficulty number in T (trillions). You're predicting mining will be above this."}
                           </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <div className="relative">
-                      <Input
-                        id="threshold"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder={
-                          currentDifficultyT > 0
-                            ? (currentDifficultyT * 1.05).toFixed(2)
-                            : "145.15"
-                        }
-                        value={thresholdT}
-                        onChange={(e) => setThresholdT(e.target.value)}
-                        className="bg-elevated border-border text-text-primary pr-10 focus:ring-primary focus:border-primary"
-                        aria-describedby="threshold-helper"
-                        required
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm font-medium">
-                        T
-                      </span>
-                    </div>
-                    <p id="threshold-helper" className="text-xs text-text-tertiary">
-                      {difficultyLoading
-                        ? "Loading Bitcoin difficulty..."
-                        : difficultyError
-                          ? difficultyError
-                          : bitcoinDifficultyFormatted
-                            ? `Current difficulty: ${bitcoinDifficultyFormatted} — set higher if you think mining gets harder`
-                            : "Set higher than current difficulty if you predict mining will get harder"}
-                    </p>
-                    {thresholdRaw !== null && (
-                      <details className="group">
-                        <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
-                          Technical details ›
-                        </summary>
-                        <p className="text-xs text-text-tertiary font-mono mt-1">
-                          Raw on-chain value: {thresholdRaw.toLocaleString()}
-                        </p>
-                      </details>
-                    )}
-                  </div>
+                          <div className="relative">
+                            <Input
+                              id="threshold"
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              placeholder={currentDifficultyT > 0 ? (currentDifficultyT * 1.05).toFixed(2) : "145.15"}
+                              value={thresholdT}
+                              onChange={(e) => setThresholdT(e.target.value)}
+                              className="bg-elevated border-border text-text-primary pr-10 focus:ring-primary focus:border-primary"
+                              aria-describedby="threshold-helper"
+                              required
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm font-medium pointer-events-none">T</span>
+                          </div>
+                          <p id="threshold-helper" className="text-xs text-text-tertiary">
+                            "T" = trillions. Higher number = you think mining gets harder.
+                          </p>
+                          {thresholdRaw !== null && (
+                            <details className="group">
+                              <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">Technical details ›</summary>
+                              <p className="text-xs text-text-tertiary font-mono mt-1">Raw on-chain value: {thresholdRaw.toLocaleString()}</p>
+                            </details>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
-                  {/* Target Block Height */}
-                  <div className="space-y-2">
-                    <Label
-                      htmlFor="blockHeight"
-                      className="text-text-primary font-medium"
-                    >
-                      Target Bitcoin Block Height *
-                    </Label>
-                    {/* Quick-set buttons */}
-                    {bitcoinBlockHeight > 0 && (
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: "Next epoch (~2 wks)", blocks: 2016 },
-                          { label: "+1 Month", blocks: 4320 },
-                          { label: "+3 Months", blocks: 12960 },
-                        ].map(({ label, blocks }) => {
-                          const isActive = blockHeight === (bitcoinBlockHeight + blocks).toString();
-                          return (
-                            <button
-                              key={blocks}
-                              type="button"
-                              onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
-                              className={`text-xs px-3 py-1.5 rounded-md border font-medium transition-all duration-150 flex items-center gap-1.5 ${
-                                isActive
-                                  ? "bg-primary/15 text-primary"
-                                  : "border-border bg-elevated text-text-secondary hover:bg-primary/5 hover:text-primary"
-                              }`}
-                              style={isActive ? {
-                                borderColor: "var(--primary)",
-                                boxShadow: "0 0 0 1px var(--primary)",
-                              } : undefined}
-                              aria-pressed={isActive}
+                  {/* ── Step 2 ── */}
+                  {(() => {
+                    const step1Done = thresholdRaw !== null && thresholdTNum > 0;
+                    const bh = parseInt(blockHeight, 10);
+                    const step2Done = blockHeight !== "" && !isNaN(bh) && bh > (bitcoinBlockHeight || 0);
+                    const presets = [
+                      { label: "~2 weeks", blocks: 2016 },
+                      { label: "~1 month", blocks: 4320 },
+                      { label: "~3 months", blocks: 12960 },
+                    ];
+                    const estDate = step2Done
+                      ? new Date(Date.now() + (bh - bitcoinBlockHeight) * 10 * 60 * 1000)
+                      : null;
+
+                    return (
+                      <div className={`bg-surface border border-border rounded-xl p-6 transition-opacity ${!step1Done ? "opacity-50 pointer-events-none" : ""}`}>
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm transition-colors ${step2Done ? "bg-success text-background" : step1Done ? "bg-primary text-primary-foreground" : "bg-elevated text-text-tertiary border border-border"}`}>
+                            {step2Done ? <Check className="h-4 w-4" /> : "2"}
+                          </div>
+                          <div>
+                            <h2 className="font-semibold text-text-primary leading-tight">Choose when to check</h2>
+                            <p className="text-xs text-text-secondary mt-0.5">When should the blockchain look at the difficulty?</p>
+                          </div>
+                        </div>
+
+                        {!step1Done && (
+                          <p className="text-sm text-text-tertiary italic">Complete step 1 first.</p>
+                        )}
+
+                        {step1Done && (
+                          <div className="space-y-4">
+                            <p className="text-sm text-text-secondary">Pick how far in the future:</p>
+
+                            {/* Big quick-pick buttons */}
+                            {bitcoinBlockHeight > 0 && (
+                              <div className="grid grid-cols-3 gap-3">
+                                {presets.map(({ label, blocks }) => {
+                                  const isActive = blockHeight === (bitcoinBlockHeight + blocks).toString();
+                                  const presetDate = new Date(Date.now() + blocks * 10 * 60 * 1000);
+                                  return (
+                                    <button
+                                      key={blocks}
+                                      type="button"
+                                      onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
+                                      className={`flex flex-col items-center gap-1 px-3 py-3 rounded-lg border font-medium transition-all duration-150 ${
+                                        isActive
+                                          ? "bg-primary/15 text-primary"
+                                          : "border-border bg-elevated text-text-secondary hover:bg-primary/5 hover:text-primary"
+                                      }`}
+                                      style={isActive ? { borderColor: "var(--primary)", boxShadow: "0 0 0 1px var(--primary)" } : undefined}
+                                      aria-pressed={isActive}
+                                    >
+                                      {isActive && <Check className="h-3.5 w-3.5" />}
+                                      <span className="text-sm font-semibold">{label}</span>
+                                      <span className="text-xs opacity-70">
+                                        {presetDate.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Manual override */}
+                            <details>
+                              <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                                Enter a specific Bitcoin block number instead ›
+                              </summary>
+                              <div className="mt-2 space-y-2">
+                                <Input
+                                  id="blockHeight"
+                                  type="number"
+                                  placeholder={bitcoinBlockHeight > 0 ? (bitcoinBlockHeight + 2016).toString() : "940000"}
+                                  value={blockHeight}
+                                  onChange={(e) => setBlockHeight(e.target.value)}
+                                  className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
+                                  style={
+                                    bitcoinBlockHeight > 0 &&
+                                    [2016, 4320, 12960].some((b) => blockHeight === (bitcoinBlockHeight + b).toString())
+                                      ? { borderColor: "var(--primary)" }
+                                      : undefined
+                                  }
+                                  aria-describedby="blockheight-helper"
+                                />
+                                {!bitcoinLoading && bitcoinBlockHeight > 0 && (
+                                  <p id="blockheight-helper" className="text-xs text-text-tertiary">
+                                    Current Bitcoin block: ~{bitcoinBlockHeight.toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
+                            </details>
+
+                            {/* Estimated date callout */}
+                            {estDate && (
+                              <div className="flex items-center gap-2 p-3 bg-success/8 border border-success/20 rounded-lg">
+                                <Check className="h-4 w-4 text-success shrink-0" />
+                                <p className="text-sm text-text-primary">
+                                  The blockchain will check on approximately{" "}
+                                  <span className="font-semibold text-success">
+                                    {estDate.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric", year: "numeric" })}
+                                  </span>
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
+
+                  {/* ── Step 3: Summary + Submit ── */}
+                  {(() => {
+                    const step1Done = thresholdRaw !== null && thresholdTNum > 0;
+                    const bh = parseInt(blockHeight, 10);
+                    const step2Done = blockHeight !== "" && !isNaN(bh) && bh > (bitcoinBlockHeight || 0);
+                    const bothDone = step1Done && step2Done;
+                    const estDate = step2Done
+                      ? new Date(Date.now() + (bh - bitcoinBlockHeight) * 10 * 60 * 1000)
+                      : null;
+
+                    return (
+                      <div className={`bg-surface border rounded-xl p-6 transition-all ${bothDone ? "border-primary/40" : "border-border opacity-50 pointer-events-none"}`}>
+                        <div className="flex items-center gap-3 mb-5">
+                          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full font-bold text-sm ${bothDone ? "bg-primary text-primary-foreground" : "bg-elevated text-text-tertiary border border-border"}`}>
+                            3
+                          </div>
+                          <div>
+                            <h2 className="font-semibold text-text-primary leading-tight">Review &amp; create</h2>
+                            <p className="text-xs text-text-secondary mt-0.5">Double-check your prediction before submitting</p>
+                          </div>
+                        </div>
+
+                        {!bothDone && (
+                          <p className="text-sm text-text-tertiary italic">Complete steps 1 and 2 first.</p>
+                        )}
+
+                        {bothDone && (
+                          <div className="space-y-4">
+                            {/* Plain-English summary */}
+                            <div className="p-4 bg-primary/5 border border-primary/25 rounded-lg">
+                              <p className="text-xs text-text-tertiary mb-1 uppercase tracking-wide font-medium">Your prediction</p>
+                              <p className="text-base text-text-primary font-medium leading-snug">
+                                "Will Bitcoin mining difficulty be above{" "}
+                                <span className="text-primary">{parseFloat(thresholdT).toFixed(2)}T</span>{" "}
+                                when block{" "}
+                                <span className="text-primary">{bh.toLocaleString()}</span>{" "}
+                                is mined?"
+                              </p>
+                              {estDate && (
+                                <p className="text-xs text-text-secondary mt-2">
+                                  Expected check date: {estDate.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
+                                </p>
+                              )}
+                            </div>
+
+                            {questionId && (
+                              <details className="group">
+                                <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">Developer info ›</summary>
+                                <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                                  <p className="text-xs text-text-secondary mb-1">Generated Question ID</p>
+                                  <code className="text-xs font-mono text-text-primary break-all block">{questionId}</code>
+                                </div>
+                              </details>
+                            )}
+
+                            <Button
+                              type="submit"
+                              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                              disabled={isPending || isConfirming || isUploading}
                             >
-                              {label}
-                            </button>
-                          );
-                        })}
+                              {isPending || isConfirming || isUploading ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  {isUploading ? "Saving market data…" : "Creating prediction…"}
+                                </>
+                              ) : (
+                                "Create This Prediction →"
+                              )}
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                    )}
-                    <Input
-                      id="blockHeight"
-                      type="number"
-                      placeholder={
-                        bitcoinBlockHeight > 0
-                          ? (bitcoinBlockHeight + 2016).toString()
-                          : "940000"
-                      }
-                      value={blockHeight}
-                      onChange={(e) => setBlockHeight(e.target.value)}
-                      className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
-                      style={
-                        bitcoinBlockHeight > 0 &&
-                        [2016, 4320, 12960].some(
-                          (b) => blockHeight === (bitcoinBlockHeight + b).toString()
-                        )
-                          ? { borderColor: "var(--primary)" }
-                          : undefined
-                      }
-                      aria-describedby="blockheight-helper"
-                      required
-                    />
-                    <div id="blockheight-helper" className="space-y-1">
-                      {!bitcoinLoading && bitcoinBlockHeight > 0 && (
-                        <p className="text-xs text-text-tertiary">
-                          Current: ~{bitcoinBlockHeight.toLocaleString()}
-                          {blockHeight && !isNaN(parseInt(blockHeight)) && parseInt(blockHeight) > bitcoinBlockHeight && (() => {
-                            const blocksAway = parseInt(blockHeight) - bitcoinBlockHeight;
-                            const msAway = blocksAway * 10 * 60 * 1000;
-                            const estDate = new Date(Date.now() + msAway);
-                            return (
-                              <span className="text-primary ml-2">
-                                ≈ {estDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} (estimated)
-                              </span>
-                            );
-                          })()}
-                        </p>
-                      )}
-                      {bitcoinLoading && (
-                        <p className="text-xs text-text-tertiary">
-                          Loading Bitcoin block height...
-                        </p>
-                      )}
-                      {bitcoinError && (
-                        <p className="text-xs text-text-tertiary">
-                          {bitcoinError}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })()}
+                </div>
 
-                  {/* CC-03: Question ID hidden in developer details */}
-                  {questionId && (
-                    <details className="group">
-                      <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
-                        Developer info ›
-                      </summary>
-                      <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
-                        <p className="text-xs text-text-secondary mb-1">Generated Question ID</p>
-                        <code className="text-xs font-mono text-text-primary break-all block">
-                          {questionId}
-                        </code>
-                      </div>
-                    </details>
-                  )}
-
-                  <Button
-                    type="submit"
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
-                    disabled={isPending || isConfirming || isUploading}
-                  >
-                    {isPending || isConfirming || isUploading ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {isUploading
-                          ? "Saving market data..."
-                          : "Creating Condition..."}
-                      </>
-                    ) : (
-                      "Create Condition"
-                    )}
-                  </Button>
-                </form>
+                {/* Right: Live preview */}
+                <StrikePreview
+                  thresholdT={thresholdTNum > 0 ? thresholdTNum : null}
+                  blockHeight={blockHeightNum}
+                  currentDifficulty={bitcoinDifficulty}
+                  currentBtcBlock={bitcoinBlockHeight}
+                />
               </div>
-
-              {/* Strike Preview */}
-              <StrikePreview
-                thresholdT={thresholdTNum > 0 ? thresholdTNum : null}
-                blockHeight={blockHeightNum}
-                currentDifficulty={bitcoinDifficulty}
-                currentBtcBlock={bitcoinBlockHeight}
-              />
-            </div>
+            </form>
           </>
         )}
       </div>
