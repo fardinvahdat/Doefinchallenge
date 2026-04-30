@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Check,
 } from "lucide-react";
 import {
   Dialog,
@@ -16,18 +17,55 @@ import { Button } from "./ui/button";
 
 interface TransactionOverlayProps {
   isOpen: boolean;
-  status:
-    | "awaiting"
-    | "pending"
-    | "broadcasting"
-    | "confirming"
-    | "confirmed"
-    | "failed";
+  status: "awaiting" | "confirming" | "confirmed" | "failed";
   txHash?: string;
   message?: string;
   error?: string;
   onClose?: () => void;
   onRetry?: () => void;
+  /** Optional context — shown as subtitle and step indicator */
+  context?: { action?: string; step?: string };
+}
+
+const STEPS = ["Wallet signed", "Submitted", "Confirmed"] as const;
+
+function StepIndicator({ status }: { status: TransactionOverlayProps["status"] }) {
+  const activeStep = status === "awaiting" ? 0 : status === "confirming" ? 1 : 2;
+  return (
+    <div className="flex items-center gap-2 justify-center w-full">
+      {STEPS.map((label, i) => {
+        const isDone = activeStep > i || status === "confirmed";
+        const isCurrent = activeStep === i && status !== "confirmed" && status !== "failed";
+        return (
+          <div key={label} className="flex items-center gap-2">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                className={`h-7 w-7 rounded-full flex items-center justify-center border-2 transition-all ${
+                  isDone
+                    ? "bg-success border-success"
+                    : isCurrent
+                      ? "border-primary animate-pulse"
+                      : "border-border bg-elevated"
+                }`}
+              >
+                {isDone ? (
+                  <Check className="h-3.5 w-3.5 text-background" />
+                ) : isCurrent ? (
+                  <Loader2 className="h-3 w-3 text-primary animate-spin" />
+                ) : (
+                  <span className="text-xs text-text-tertiary">{i + 1}</span>
+                )}
+              </div>
+              <span className="text-[10px] text-text-tertiary whitespace-nowrap">{label}</span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div className={`w-8 h-0.5 mb-4 rounded ${activeStep > i || status === "confirmed" ? "bg-success" : "bg-border"}`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function TransactionOverlay({
@@ -38,53 +76,31 @@ export function TransactionOverlay({
   error,
   onClose,
   onRetry,
+  context,
 }: TransactionOverlayProps) {
   const getStatusConfig = () => {
     switch (status) {
       case "awaiting":
         return {
           icon: <Loader2 className="h-16 w-16 text-accent animate-spin" />,
-          title: "Confirm in Wallet",
-          description:
-            message ||
-            "Please confirm the transaction in your wallet extension...",
-          color: "accent",
-          showClose: false,
-        };
-      case "pending":
-        return {
-          icon: <Loader2 className="h-16 w-16 text-primary animate-spin" />,
-          title: "Transaction Pending",
-          description:
-            message ||
-            "Please wait while your transaction is being processed...",
-          color: "primary",
-          showClose: false,
-        };
-      case "broadcasting":
-        return {
-          icon: <Loader2 className="h-16 w-16 text-accent animate-spin" />,
-          title: "Broadcasting Transaction",
-          description: message || "Sending your transaction to the network...",
+          title: context?.action ?? "Confirm in Wallet",
+          description: message ?? "Please confirm the transaction in your wallet extension...",
           color: "accent",
           showClose: false,
         };
       case "confirming":
         return {
           icon: <Loader2 className="h-16 w-16 text-primary animate-spin" />,
-          title: "Waiting for Confirmation",
-          description:
-            message ||
-            "Your transaction has been submitted. Waiting for block confirmation...",
+          title: context?.action ?? "Waiting for Confirmation",
+          description: message ?? "Your transaction has been submitted. Waiting for block confirmation...",
           color: "primary",
           showClose: false,
         };
       case "confirmed":
         return {
           icon: <CheckCircle2 className="h-16 w-16 text-success" />,
-          title: "Transaction Confirmed",
-          description:
-            message || "Your transaction has been successfully confirmed!",
+          title: "Done!",
+          description: message ?? "Your transaction has been confirmed.",
           color: "success",
           showClose: true,
         };
@@ -92,8 +108,7 @@ export function TransactionOverlay({
         return {
           icon: <XCircle className="h-16 w-16 text-danger" />,
           title: "Transaction Failed",
-          description:
-            error || message || "Your transaction failed. Please try again.",
+          description: error ?? message ?? "Your transaction failed. Please try again.",
           color: "danger",
           showClose: true,
         };
@@ -101,7 +116,7 @@ export function TransactionOverlay({
         return {
           icon: <Loader2 className="h-16 w-16 text-primary animate-spin" />,
           title: "Processing",
-          description: message || "Processing your transaction...",
+          description: message ?? "Processing your transaction...",
           color: "primary",
           showClose: false,
         };
@@ -110,14 +125,14 @@ export function TransactionOverlay({
 
   const config = getStatusConfig();
 
-  // #35: after 5 minutes with no resolution, show an escape button so users aren't trapped
+  // TO-04: Reduced from 5 minutes to 90 seconds
   const [timedOut, setTimedOut] = useState(false);
   useEffect(() => {
     if (!isOpen || config.showClose) {
       setTimedOut(false);
       return;
     }
-    const t = setTimeout(() => setTimedOut(true), 5 * 60 * 1000);
+    const t = setTimeout(() => setTimedOut(true), 90 * 1000);
     return () => clearTimeout(t);
   }, [isOpen, config.showClose]);
 
@@ -137,12 +152,23 @@ export function TransactionOverlay({
         </DialogDescription>
         <div className="flex flex-col items-center text-center py-6 space-y-6">
           <div className="animate-pulse-slow">{config.icon}</div>
+
           <div className="space-y-2">
             <h3 className="text-2xl font-bold text-text-primary">
               {config.title}
             </h3>
+            {context?.step && (
+              <p className="text-xs text-text-tertiary">{context.step}</p>
+            )}
             <p className="text-text-secondary">{config.description}</p>
           </div>
+
+          {/* TO-03: Step progress indicator */}
+          {status !== "failed" && (
+            <div className="w-full px-4">
+              <StepIndicator status={status} />
+            </div>
+          )}
 
           {txHash && (
             <a
@@ -154,13 +180,6 @@ export function TransactionOverlay({
               View on Basescan
               <ExternalLink className="h-4 w-4" />
             </a>
-          )}
-
-          {status === "pending" && (
-            <div className="flex items-center gap-2 text-text-tertiary text-xs">
-              <div className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-              <span>Waiting for confirmation...</span>
-            </div>
           )}
 
           {status === "awaiting" && (

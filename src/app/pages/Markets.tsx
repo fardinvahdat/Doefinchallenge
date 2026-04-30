@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Badge } from "../components/ui/badge";
@@ -8,7 +8,7 @@ import {
   CardHeader,
   CardTitle,
 } from "../components/ui/card";
-import { Search, X, Loader2, Wallet, AlertCircle } from "lucide-react";
+import { Search, X, Loader2, BarChart3, AlertCircle, ArrowRight, ExternalLink } from "lucide-react";
 import { CopyableHash } from "../components/CopyableHash";
 import { useNavigate } from "react-router";
 import {
@@ -39,9 +39,11 @@ function CollateralBadge({ token, symbol }: { token: string; symbol?: string }) 
 function ConditionCard({
   condition,
   getTokenSymbol,
+  onParticipate,
 }: {
   condition: ApiCondition;
   getTokenSymbol: (addr: string) => string | undefined;
+  onParticipate: (conditionId: string) => void;
 }) {
   const parsed = parseQuestionString(condition.question_string);
   const hasValidOracle =
@@ -50,7 +52,7 @@ function ConditionCard({
     condition.oracle !== "undefined";
 
   return (
-    <Card className="bg-surface border-border hover:border-primary/50 transition-colors">
+    <Card className="bg-surface border-border hover:border-primary/50 transition-colors h-full flex flex-col">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-2">
           <CardTitle className="text-sm font-medium text-text-primary leading-snug">
@@ -71,7 +73,7 @@ function ConditionCard({
         {parsed && (
           <div className="flex flex-wrap gap-1 mt-2">
             <Badge variant="outline" className="text-xs">
-              {parsed.thresholdT.toFixed(2)}T
+              {parsed.thresholdT.toFixed(2)}T threshold
             </Badge>
             <Badge variant="outline" className="text-xs">
               Block {parsed.blockHeight.toLocaleString()}
@@ -80,37 +82,58 @@ function ConditionCard({
         )}
       </CardHeader>
 
-      <CardContent className="space-y-3">
-        {condition.markets.length > 0 && (
-          <div className="space-y-1">
-            <p className="text-xs text-text-tertiary">Collateral markets:</p>
-            <div className="flex flex-wrap gap-1">
-              {condition.markets.map((m) => (
-                <CollateralBadge
-                  key={m.market_id}
-                  token={m.collateral_token}
-                  symbol={getTokenSymbol(m.collateral_token)}
-                />
-              ))}
+      <CardContent className="space-y-3 flex-1 flex flex-col">
+        <div className="flex-1 space-y-3">
+          {condition.markets.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs text-text-tertiary">Available in:</p>
+              <div className="flex flex-wrap gap-1">
+                {condition.markets.map((m) => (
+                  <CollateralBadge
+                    key={m.market_id}
+                    token={m.collateral_token}
+                    symbol={getTokenSymbol(m.collateral_token)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        <div className="pt-2 border-t border-border">
-          <p className="text-xs text-text-tertiary mb-1">Condition ID</p>
-          <CopyableHash hash={condition.condition_id} className="text-xs" />
+          <div className="pt-2 border-t border-border">
+            <p className="text-xs text-text-tertiary mb-1">Market ID</p>
+            <CopyableHash hash={condition.condition_id} className="text-xs" />
+          </div>
+
+          {hasValidOracle && (
+            <details className="group">
+              <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none flex items-center gap-1">
+                <span>Developer details</span>
+                <span className="group-open:rotate-90 transition-transform inline-block">›</span>
+              </summary>
+              <div className="mt-2 pl-2">
+                <a
+                  href={`https://sepolia.basescan.org/address/${condition.oracle}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                >
+                  Verify on explorer
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              </div>
+            </details>
+          )}
         </div>
 
-        {/* #27: only render oracle link when address is valid and non-zero */}
-        {hasValidOracle && (
-          <a
-            href={`https://sepolia.basescan.org/address/${condition.oracle}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-primary hover:underline"
+        {condition.active && (
+          <Button
+            onClick={() => onParticipate(condition.condition_id)}
+            size="sm"
+            className="w-full mt-2 bg-primary hover:bg-primary/90 text-primary-foreground"
           >
-            Oracle on Basescan
-          </a>
+            Participate
+            <ArrowRight className="h-4 w-4 ml-1" />
+          </Button>
         )}
       </CardContent>
     </Card>
@@ -118,6 +141,7 @@ function ConditionCard({
 }
 
 export default function Markets() {
+  useEffect(() => { document.title = "Markets — Doefin"; }, []);
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<ConditionStatus>("active");
   const [searchQuery, setSearchQuery] = useState("");
@@ -125,7 +149,6 @@ export default function Markets() {
   const { conditions, totalCount, isLoading, error } = useConditions(statusFilter);
   const { tokens } = useTokens();
 
-  // #26: build a lookup map so CollateralBadge can show token symbols
   const tokenSymbolMap = useMemo(() => {
     const m: Record<string, string> = {};
     tokens.forEach((t) => { m[t.address.toLowerCase()] = t.symbol; });
@@ -145,6 +168,10 @@ export default function Markets() {
     );
   }, [conditions, searchQuery]);
 
+  const handleParticipate = (conditionId: string) => {
+    navigate(`/create-market?conditionId=${conditionId}`);
+  };
+
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
       <div className="max-w-5xl mx-auto">
@@ -161,21 +188,22 @@ export default function Markets() {
               variant="outline"
               className="bg-elevated border-border hover:bg-elevated/80"
             >
-              New Condition
-            </Button>
-            <Button
-              onClick={() => navigate("/create-market")}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground"
-            >
-              Split Position
+              New Prediction
             </Button>
           </div>
         </div>
 
-        <div className="flex gap-1 mb-4 p-1 bg-surface rounded-lg border border-border w-fit">
+        {/* Status Tabs */}
+        <div
+          role="tablist"
+          aria-label="Market status filter"
+          className="flex gap-1 mb-4 p-1 bg-surface rounded-lg border border-border w-fit"
+        >
           {STATUS_TABS.map((tab) => (
             <button
               key={tab.value}
+              role="tab"
+              aria-selected={statusFilter === tab.value}
               onClick={() => setStatusFilter(tab.value)}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
                 statusFilter === tab.value
@@ -184,15 +212,19 @@ export default function Markets() {
               }`}
             >
               {tab.label}
+              {statusFilter === tab.value && !isLoading && (
+                <span className="ml-1.5 text-xs opacity-75">({totalCount})</span>
+              )}
             </button>
           ))}
         </div>
 
+        {/* Search */}
         <div className="mb-6">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-text-tertiary" />
             <Input
-              placeholder="Search by question, condition ID..."
+              placeholder="Search predictions by question or threshold..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 bg-surface border-border text-text-primary focus:ring-primary focus:border-primary"
@@ -200,6 +232,7 @@ export default function Markets() {
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery("")}
+                aria-label="Clear search"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
               >
                 <X className="h-4 w-4" />
@@ -211,8 +244,7 @@ export default function Markets() {
         {error && (
           <div className="mb-6 flex items-center gap-2 p-4 bg-danger/10 border border-danger/30 rounded-xl text-sm text-danger">
             <AlertCircle className="h-4 w-4 flex-shrink-0" />
-            Failed to load conditions. Check your internet connection or API
-            configuration.
+            Failed to load markets. Check your internet connection or API configuration.
           </div>
         )}
 
@@ -224,7 +256,7 @@ export default function Markets() {
         ) : filtered.length === 0 ? (
           <div className="bg-surface border border-border rounded-xl p-12 text-center">
             <div className="w-16 h-16 bg-elevated rounded-full flex items-center justify-center mx-auto mb-4">
-              <Wallet className="h-8 w-8 text-text-tertiary" />
+              <BarChart3 className="h-8 w-8 text-text-tertiary" />
             </div>
             <h3 className="text-xl font-semibold text-text-primary mb-2">
               No{" "}
@@ -233,28 +265,28 @@ export default function Markets() {
                 : statusFilter === "resolved"
                   ? "resolved"
                   : ""}{" "}
-              conditions found
+              markets found
             </h3>
             <p className="text-text-secondary mb-6 max-w-md mx-auto">
               {searchQuery
-                ? "No conditions match your search."
+                ? "No markets match your search. Try a different question keyword."
                 : statusFilter === "active"
-                  ? "No active conditions yet. Create one to get started."
-                  : "No conditions in this category yet."}
+                  ? "No active markets yet. Create a prediction to get started."
+                  : "No markets in this category yet."}
             </p>
             {!searchQuery && statusFilter === "active" && (
               <Button
                 onClick={() => navigate("/create-condition")}
                 className="bg-primary hover:bg-primary/90 text-primary-foreground"
               >
-                Create Condition
+                Make a Prediction
               </Button>
             )}
           </div>
         ) : (
           <>
             <p className="text-xs text-text-tertiary mb-4">
-              {filtered.length} of {totalCount} condition
+              {filtered.length} of {totalCount} market
               {totalCount !== 1 ? "s" : ""}
               {searchQuery && " matching your search"}
             </p>
@@ -264,6 +296,7 @@ export default function Markets() {
                   key={c.condition_id}
                   condition={c}
                   getTokenSymbol={getTokenSymbol}
+                  onParticipate={handleParticipate}
                 />
               ))}
             </div>

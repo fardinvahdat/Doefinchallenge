@@ -104,7 +104,7 @@ export function WalletConnect() {
                         )}
                       </div>
                     )}
-                    <span className="hidden sm:inline text-xs font-mono">
+                    <span className="text-xs">
                       {chain.name}
                     </span>
                   </button>
@@ -115,7 +115,7 @@ export function WalletConnect() {
                     className="inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-elevated hover:bg-elevated/80 text-text-primary border border-border shadow-sm h-9 px-3 py-2 rounded-md hover:shadow-[0_0_20px_rgba(168,85,247,0.3)] active:scale-95"
                   >
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono">
+                      <span className="text-xs font-mono hidden xs:inline">
                         {account.displayName}
                       </span>
                       {balanceDisplay && (

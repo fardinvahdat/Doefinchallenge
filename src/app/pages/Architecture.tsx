@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { ArrowRight, Database, Wallet as WalletIcon, FileCode, Activity, Zap, Radio } from "lucide-react";
 
 export default function Architecture() {
+  useEffect(() => { document.title = "Architecture — Doefin"; }, []);
   return (
     <div className="container mx-auto px-4 lg:px-8 py-12">
       <div className="max-w-5xl mx-auto">

@@ -1,4 +1,4 @@
-import { AlertTriangle, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, Minus, CheckCircle2, XCircle } from "lucide-react";
 
 interface StrikePreviewProps {
   thresholdT: number | null;
@@ -138,7 +138,7 @@ export function StrikePreview({
   const hasContent = thresholdT !== null || blockHeight !== null;
 
   return (
-    <div className="bg-surface border border-border rounded-xl p-6 md:p-8 h-fit sticky top-24">
+    <div className="bg-surface border border-border rounded-xl p-6 md:p-8 h-fit lg:sticky lg:top-24">
       <h3 className="text-lg font-semibold mb-4">Market Preview</h3>
 
       {!hasContent ? (
@@ -170,13 +170,19 @@ export function StrikePreview({
           {/* Outcomes */}
           <div className="grid grid-cols-2 gap-3">
             <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <p className="text-xs text-text-secondary mb-1">YES — if difficulty</p>
+              <div className="flex items-center gap-1.5 mb-1">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
+                <p className="text-xs text-text-secondary">YES — if difficulty</p>
+              </div>
               <p className="text-sm font-semibold text-green-400">
                 ≥ {thresholdT !== null ? formatT(thresholdT) : "—"}
               </p>
             </div>
             <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <p className="text-xs text-text-secondary mb-1">NO — if difficulty</p>
+              <div className="flex items-center gap-1.5 mb-1">
+                <XCircle className="h-3.5 w-3.5 text-red-400" />
+                <p className="text-xs text-text-secondary">NO — if difficulty</p>
+              </div>
               <p className="text-sm font-semibold text-red-400">
                 &lt; {thresholdT !== null ? formatT(thresholdT) : "—"}
               </p>

@@ -1,4 +1,4 @@
-import { AlertCircle, Fuel, TrendingUp, TrendingDown, Clock } from "lucide-react";
+import { AlertCircle, Fuel, TrendingUp, TrendingDown, Clock, Lightbulb } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,8 @@ interface GasEstimationModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: () => void;
+  /** Label for the confirm button — should be action-specific */
+  submitLabel?: string;
   gasEstimate: {
     estimatedGas: bigint;
     gasPrice: bigint;
@@ -35,6 +37,7 @@ export function GasEstimationModal({
   open,
   onOpenChange,
   onSubmit,
+  submitLabel,
   gasEstimate,
   transactionDetails: customTransactionDetails,
 }: GasEstimationModalProps) {
@@ -51,17 +54,16 @@ export function GasEstimationModal({
 
   const defaultTransactionDetails = {
     title: "Create Condition",
-    description:
-      "Create a new binary prediction condition with metadata on the Diamond contract",
+    description: "Create a new binary prediction condition on-chain",
     items: [
-      { label: "Contract", value: "Diamond" },
+      { label: "Network", value: "Base Sepolia (Testnet)" },
       { label: "Function", value: "createConditionWithMetadata()" },
-      { label: "Outcomes", value: "2 (YES/NO)" },
+      { label: "Outcomes", value: "2 (YES / NO)" },
     ],
   };
 
-  const transactionDetails =
-    customTransactionDetails || defaultTransactionDetails;
+  const transactionDetails = customTransactionDetails || defaultTransactionDetails;
+  const confirmLabel = submitLabel ?? transactionDetails.title ?? "Confirm & Send";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -72,7 +74,7 @@ export function GasEstimationModal({
             Confirm Transaction
           </DialogTitle>
           <DialogDescription className="text-text-secondary">
-            Review the transaction details and estimated gas costs
+            Review the details and estimated network fee
           </DialogDescription>
         </DialogHeader>
 
@@ -102,16 +104,12 @@ export function GasEstimationModal({
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-text-primary flex items-center gap-2">
               <Fuel className="h-4 w-4" />
-              Gas Estimation
+              Network Fee
             </h3>
 
             {isEstimating ? (
               <div className="space-y-2">
                 <Skeleton className="h-16 w-full bg-surface" />
-                <div className="grid grid-cols-2 gap-2">
-                  <Skeleton className="h-12 w-full bg-surface" />
-                  <Skeleton className="h-12 w-full bg-surface" />
-                </div>
               </div>
             ) : hasError ? (
               <div className="p-4 bg-danger/10 border border-danger/30 rounded-lg">
@@ -119,17 +117,18 @@ export function GasEstimationModal({
                   <AlertCircle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-danger mb-1">
-                      {gasEstimate.conditionExists
-                        ? "Condition Already Exists"
-                        : "Gas Estimation Failed"}
+                      {conditionExists
+                        ? "Prediction Already Exists"
+                        : "Fee Estimation Failed"}
                     </p>
                     <p className="text-xs text-text-secondary mb-2">{error}</p>
 
-                    {gasEstimate.conditionExists ? (
+                    {conditionExists ? (
                       <div className="mt-3 p-2 bg-background/50 rounded border border-border/50">
-                        <p className="text-xs font-semibold text-text-primary mb-2">
-                          💡 Solutions:
-                        </p>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Lightbulb className="h-3.5 w-3.5 text-primary" />
+                          <span className="text-xs font-semibold text-text-primary">Solutions:</span>
+                        </div>
                         <ul className="text-xs text-text-secondary space-y-1 list-disc list-inside">
                           <li>
                             Change the{" "}
@@ -146,14 +145,13 @@ export function GasEstimationModal({
                             value
                           </li>
                           <li>
-                            Or use the existing condition in Create Market
+                            Or use the existing prediction in Get YES/NO Tokens
                           </li>
                         </ul>
                       </div>
                     ) : (
                       <p className="text-xs text-text-tertiary mt-2">
-                        The transaction may fail. Please check your inputs and
-                        try again.
+                        The transaction may fail. Please check your inputs and try again.
                       </p>
                     )}
                   </div>
@@ -168,66 +166,54 @@ export function GasEstimationModal({
                   const GasIcon = gasPriceGwei < 10 ? TrendingUp : TrendingDown;
                   const gasColor = gasPriceGwei < 1 ? "text-success" : gasPriceGwei < 10 ? "text-accent" : "text-danger";
                   return (
-                <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-text-secondary">
-                      Estimated Cost
-                    </span>
-                    <div className="flex items-center gap-2">
-                      <GasIcon className={`h-4 w-4 ${gasColor}`} />
-                      <span className={`text-xs ${gasColor}`}>{gasLevel}</span>
+                    <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm text-text-secondary">
+                          Estimated Fee
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <GasIcon className={`h-4 w-4 ${gasColor}`} />
+                          <span className={`text-xs ${gasColor}`}>{gasLevel}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-bold text-text-primary">
+                          {parseFloat(estimatedCostEth).toFixed(6)} ETH
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-tertiary mt-1">
+                        ≈ ${estimatedCostUSD} USD (estimate)
+                      </p>
                     </div>
-                  </div>
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-bold text-text-primary">
-                      ${estimatedCostUSD}
-                    </span>
-                    <span className="text-sm text-text-secondary">USD</span>
-                  </div>
-                  <p className="text-xs text-text-tertiary mt-1">
-                    ≈ {parseFloat(estimatedCostEth).toFixed(6)} ETH
-                  </p>
-                </div>
                   );
                 })()}
 
-                {/* Gas Details Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Gas Limit */}
-                  <div className="p-3 bg-background border border-border rounded-lg">
-                    <p className="text-xs text-text-secondary mb-1">
-                      Gas Limit
-                    </p>
-                    <p className="text-lg font-semibold text-text-primary">
-                      {estimatedGas.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-text-tertiary mt-0.5">units</p>
-                  </div>
-
-                  {/* Gas Price */}
-                  <div className="p-3 bg-background border border-border rounded-lg">
-                    <p className="text-xs text-text-secondary mb-1">
-                      Gas Price
-                    </p>
-                    <p className="text-lg font-semibold text-text-primary">
-                      {formatGwei(gasPrice)}
-                    </p>
-                    <p className="text-xs text-text-tertiary mt-0.5">Gwei</p>
-                  </div>
-                </div>
-
-                {/* Info Box */}
-                <div className="p-3 bg-accent/5 border border-accent/30 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <Clock className="h-4 w-4 text-accent flex-shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs text-text-secondary">
-                        This estimate includes a 20% safety buffer. Actual cost
-                        may be lower.
+                {/* GE-03: Gas details in collapsible section */}
+                <details className="group">
+                  <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none flex items-center gap-1">
+                    <Clock className="h-3.5 w-3.5 text-accent" />
+                    Technical fee details ›
+                  </summary>
+                  <div className="mt-2 grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-background border border-border rounded-lg">
+                      <p className="text-xs text-text-secondary mb-1">Gas Limit</p>
+                      <p className="text-lg font-semibold text-text-primary">
+                        {estimatedGas.toLocaleString()}
                       </p>
+                      <p className="text-xs text-text-tertiary mt-0.5">units</p>
+                    </div>
+                    <div className="p-3 bg-background border border-border rounded-lg">
+                      <p className="text-xs text-text-secondary mb-1">Gas Price</p>
+                      <p className="text-lg font-semibold text-text-primary">
+                        {formatGwei(gasPrice)}
+                      </p>
+                      <p className="text-xs text-text-tertiary mt-0.5">Gwei</p>
                     </div>
                   </div>
-                </div>
+                  <p className="text-xs text-text-tertiary mt-2">
+                    Includes a 20% safety buffer. Actual cost may be lower.
+                  </p>
+                </details>
               </>
             )}
           </div>
@@ -257,7 +243,7 @@ export function GasEstimationModal({
             disabled={hasError || isEstimating}
             className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground transition-all hover:shadow-[0_0_20px_rgba(168,85,247,0.4)]"
           >
-            {isEstimating ? "Estimating..." : "Confirm & Send"}
+            {isEstimating ? "Estimating..." : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -18,10 +18,12 @@ import {
   DialogTitle,
   DialogDescription,
 } from "../components/ui/dialog";
-import { useNavigate } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { GasEstimationModal } from "../components/GasEstimationModal";
 import { StrikePreview } from "../components/StrikePreview";
+import { CopyableHash } from "../components/CopyableHash";
+import { WalletConnect } from "../components/WalletConnect";
 import {
   useAccount,
   useChainId,
@@ -41,6 +43,7 @@ import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
 import NetworkMonitor from "../components/NetworkMonitor";
+import { friendlyError } from "../../utils/friendlyError";
 
 // TokenCard is a separate component so useReadContract doesn't violate rules of hooks
 function TokenCard({
@@ -70,7 +73,7 @@ function TokenCard({
   return (
     <button
       onClick={() => onSelect(token)}
-      className={`p-6 rounded-xl border-2 text-left transition-all ${
+      className={`p-4 md:p-6 rounded-xl border-2 text-left transition-all ${
         selected
           ? "border-accent bg-accent/5 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
           : "border-border bg-elevated hover:border-accent/50"
@@ -80,24 +83,25 @@ function TokenCard({
         <div>
           <h3 className="text-lg font-bold text-text-primary">{token.symbol}</h3>
           <p className="text-sm text-text-secondary">{token.name}</p>
+          <p className="text-xs text-text-tertiary mt-0.5">Test token — no real value</p>
         </div>
         {selected && (
-          <div className="h-5 w-5 rounded-full bg-accent flex items-center justify-center">
+          <div className="h-5 w-5 rounded-full bg-accent flex items-center justify-center flex-shrink-0">
             <Check className="h-3 w-3 text-accent-foreground" />
           </div>
         )}
       </div>
       {displayBalance !== null && (
-        <div className="flex items-baseline gap-2">
+        <div className="flex items-baseline gap-2 mb-2">
           <span className="text-2xl font-bold text-text-primary">
             {displayBalance}
           </span>
           <span className="text-text-tertiary text-sm">{token.symbol}</span>
         </div>
       )}
-      <code className="text-xs text-text-tertiary font-mono mt-2 block truncate">
-        {token.address}
-      </code>
+      <div onClick={(e) => e.stopPropagation()}>
+        <CopyableHash hash={token.address} className="text-xs" />
+      </div>
     </button>
   );
 }
@@ -116,7 +120,9 @@ function useSelectedConditionInfo(condition: ApiCondition | null) {
 }
 
 export default function CreateMarket() {
+  useEffect(() => { document.title = "Get YES/NO Tokens — Doefin"; }, []);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { address, isConnected } = useAccount();
   const currentChain = useChainId();
 
@@ -126,6 +132,15 @@ export default function CreateMarket() {
   const { height: bitcoinBlockHeight } = useBitcoinBlockHeight();
 
   const [selectedCondition, setSelectedCondition] = useState<ApiCondition | null>(null);
+
+  // Pre-select condition from URL param (e.g. from "Participate" button on Markets page)
+  useEffect(() => {
+    const conditionId = searchParams.get("conditionId");
+    if (conditionId && conditions.length > 0 && !selectedCondition) {
+      const match = conditions.find((c) => c.condition_id === conditionId);
+      if (match) setSelectedCondition(match);
+    }
+  }, [searchParams, conditions, selectedCondition]);
   const [selectedToken, setSelectedToken] = useState<ApiToken | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -224,7 +239,7 @@ export default function CreateMarket() {
 
   useEffect(() => {
     if (approveError) {
-      toast.error("Approval failed: " + (approveError as Error).message);
+      toast.error(friendlyError(approveError));
     }
   }, [approveError]);
 
@@ -283,7 +298,7 @@ export default function CreateMarket() {
 
   useEffect(() => {
     if (splitError) {
-      toast.error("Transaction failed: " + (splitError as Error).message);
+      toast.error(friendlyError(splitError));
     }
   }, [splitError]);
 
@@ -292,7 +307,7 @@ export default function CreateMarket() {
     try {
       await approve();
     } catch (err) {
-      toast.error("Approval failed: " + (err instanceof Error ? err.message : "Unknown error"));
+      toast.error(friendlyError(err));
     }
   };
 
@@ -366,21 +381,33 @@ export default function CreateMarket() {
     <div className="container mx-auto px-4 lg:px-8 py-12">
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl md:text-4xl font-bold mb-2">Create Market</h1>
+          <h1 className="text-3xl md:text-4xl font-bold mb-2">Get YES/NO Tokens</h1>
           <p className="text-text-secondary text-lg">
-            Split collateral into YES/NO position tokens for an active condition
+            Put in test tokens and receive YES + NO prediction tokens back
           </p>
         </div>
 
         {!isConnected ? (
           <div className="bg-surface border border-border rounded-xl p-12 text-center">
-            <p className="text-text-secondary text-lg mb-4">
-              Please connect your wallet to create a market
+            <p className="text-text-secondary text-lg mb-2">
+              Connect your wallet to get started
             </p>
+            <p className="text-text-tertiary text-sm mb-6">
+              It's free — use a test wallet. No real money on Base Sepolia.
+            </p>
+            <div className="flex justify-center">
+              <WalletConnect />
+            </div>
           </div>
         ) : (
           <div className="space-y-8">
             <NetworkMonitor />
+
+            {/* CM-04: Two-transaction flow warning */}
+            <div className="p-4 bg-accent/5 border border-accent/30 rounded-xl text-sm text-text-secondary">
+              <span className="font-semibold text-accent">Heads up:</span> You will be asked to
+              sign 2 wallet transactions — first to approve token spending, then to get your YES/NO tokens.
+            </div>
 
             {/* Step 1: Select Condition */}
             <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
@@ -388,7 +415,10 @@ export default function CreateMarket() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold">
                   1
                 </div>
-                <h2 className="text-xl font-semibold">Select Active Condition</h2>
+                <div>
+                  <h2 className="text-xl font-semibold">Pick a Prediction</h2>
+                  <p className="text-sm text-text-secondary">Choose which yes/no question you want to trade</p>
+                </div>
               </div>
 
               {conditionsLoading ? (
@@ -423,14 +453,9 @@ export default function CreateMarket() {
                     <SelectContent>
                       {conditions.map((c) => (
                         <SelectItem key={c.condition_id} value={c.condition_id}>
-                          <div className="flex flex-col">
-                            <span className="font-medium line-clamp-1">
-                              {c.question_string || c.condition_id.slice(0, 20) + "..."}
-                            </span>
-                            <span className="text-xs text-text-tertiary font-mono">
-                              {c.condition_id.slice(0, 20)}...
-                            </span>
-                          </div>
+                          <span className="font-medium line-clamp-2">
+                            {c.question_string || "Unknown prediction"}
+                          </span>
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -449,13 +474,16 @@ export default function CreateMarket() {
               )}
             </div>
 
-            {/* Step 2: Select Collateral */}
+            {/* Step 2: Choose Currency */}
             <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent text-accent-foreground font-bold">
                   2
                 </div>
-                <h2 className="text-xl font-semibold">Select Collateral</h2>
+                <div>
+                  <h2 className="text-xl font-semibold">Choose Your Currency</h2>
+                  <p className="text-sm text-text-secondary">Pick which test token to put in. You get the same amount back as YES + NO tokens.</p>
+                </div>
               </div>
 
               {tokensLoading ? (
@@ -482,20 +510,23 @@ export default function CreateMarket() {
               )}
             </div>
 
-            {/* Step 3: Enter Amount & Execute */}
+            {/* Step 3: Enter Amount */}
             <div className="bg-surface border border-border rounded-xl p-6 md:p-8">
               <div className="flex items-center gap-3 mb-6">
                 <div className="flex h-8 w-8 items-center justify-center rounded-full bg-success text-background font-bold">
                   3
                 </div>
-                <h2 className="text-xl font-semibold">Enter Amount & Split</h2>
+                <div>
+                  <h2 className="text-xl font-semibold">How Much to Put In?</h2>
+                  <p className="text-sm text-text-secondary">You'll get the same amount back as YES and NO tokens</p>
+                </div>
               </div>
 
               <div className="max-w-xl space-y-6">
                 {/* Amount Input */}
                 <div className="space-y-2">
                   <Label htmlFor="amount" className="text-text-primary">
-                    Collateral Amount
+                    Amount
                   </Label>
                   <div className="flex gap-2">
                     <Input
@@ -504,7 +535,12 @@ export default function CreateMarket() {
                       placeholder="0.0"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
-                      className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
+                      className={`bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary ${
+                        amount && collateralBalance &&
+                        parseFloat(amount) > parseFloat(formatUnits(collateralBalance.value, collateralBalance.decimals))
+                          ? "border-danger focus:border-danger"
+                          : ""
+                      }`}
                       disabled={!selectedToken}
                     />
                     <Button
@@ -525,6 +561,26 @@ export default function CreateMarket() {
                       {selectedToken?.symbol}
                     </p>
                   )}
+                  {collateralBalance && collateralBalance.value === 0n && (
+                    <p className="text-xs text-yellow-400">
+                      Your balance is zero.{" "}
+                      <a
+                        href="https://www.alchemy.com/faucets/base-sepolia"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline hover:text-yellow-300"
+                      >
+                        Get free test ETH →
+                      </a>{" "}
+                      then swap for {selectedToken?.symbol} on the testnet.
+                    </p>
+                  )}
+                  {/* CM-05: Inline balance error */}
+                  {amount && collateralBalance && parseFloat(amount) > parseFloat(formatUnits(collateralBalance.value, collateralBalance.decimals)) && (
+                    <p className="text-xs text-danger" role="alert">
+                      Amount exceeds your available balance
+                    </p>
+                  )}
                 </div>
 
                 {/* Approval */}
@@ -536,7 +592,7 @@ export default function CreateMarket() {
                           Approve {selectedToken.symbol}
                         </p>
                         <p className="text-xs text-text-secondary mt-1">
-                          Allow the Diamond contract to spend your{" "}
+                          Step 1 of 2 — Allow the smart contract to use your{" "}
                           {selectedToken.symbol}
                         </p>
                       </div>
@@ -575,33 +631,51 @@ export default function CreateMarket() {
                     !amount ||
                     !isApproved ||
                     isSplitting ||
-                    isSplitConfirming
+                    isSplitConfirming ||
+                    (!!amount && !!collateralBalance && parseFloat(amount) > parseFloat(formatUnits(collateralBalance.value, collateralBalance.decimals)))
                   }
                   className="w-full bg-success hover:bg-success/90 text-background transition-all hover:shadow-[0_0_20px_rgba(34,197,94,0.4)]"
                 >
                   {isSplitting || isSplitConfirming ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Splitting Position...
+                      Getting tokens...
                     </>
                   ) : (
-                    "Split Position"
+                    "Get My YES/NO Tokens"
                   )}
                 </Button>
 
                 {/* Summary */}
                 {selectedCondition && selectedToken && amount && (
-                  <div className="p-4 bg-elevated border border-border rounded-lg space-y-2 text-sm">
+                  <div className="p-4 bg-elevated border border-border rounded-lg space-y-3 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-text-secondary">You will receive:</span>
+                      <span className="text-text-secondary">You put in:</span>
+                      <span className="text-text-primary font-medium">
+                        {amount} {selectedToken.symbol}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-text-secondary">You get back:</span>
                       <span className="text-text-primary font-medium">
                         {amount} YES + {amount} NO tokens
                       </span>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-text-secondary">Collateral:</span>
-                      <span className="text-text-primary">{selectedToken.symbol}</span>
-                    </div>
+                    {/* CM-06: YES/NO explanation */}
+                    <details className="group pt-1 border-t border-border">
+                      <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                        What are YES/NO tokens? ›
+                      </summary>
+                      <div className="mt-2 space-y-1">
+                        <p className="text-xs text-text-secondary">
+                          <span className="text-green-400 font-medium">YES tokens</span> pay out 1:1 if Bitcoin difficulty exceeds the threshold at the target block.
+                        </p>
+                        <p className="text-xs text-text-secondary">
+                          <span className="text-red-400 font-medium">NO tokens</span> pay out 1:1 if difficulty stays below the threshold.
+                        </p>
+                        <p className="text-xs text-text-tertiary">You can sell either token to someone with the opposite view.</p>
+                      </div>
+                    </details>
                   </div>
                 )}
               </div>

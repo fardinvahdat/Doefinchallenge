@@ -1,6 +1,6 @@
 import { useSwitchChain } from "wagmi";
 import { baseSepolia } from "wagmi/chains";
-import { AlertTriangle, X, Loader2 } from "lucide-react";
+import { AlertTriangle, X, Loader2, ArrowRightLeft } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Button } from "./ui/button";
 
@@ -27,7 +27,7 @@ export default function NetworkNotification({
   if (!isCorrectChain) {
     // If baseSepolia is not in the configured chains, we can't switch to it
     return (
-      <div className="mb-10 w-full">
+      <div className="mb-4 w-full">
         <Alert
           variant="destructive"
           className="border-amber-500/50 bg-amber-500/10"
@@ -55,7 +55,7 @@ export default function NetworkNotification({
   }
 
   return (
-    <div className="mb-10 w-full">
+    <div className="mb-4 w-full">
       <Alert
         variant="default"
         className="border-amber-500/50 bg-amber-500/10 shadow-lg shadow-amber-500/10"
@@ -83,7 +83,7 @@ export default function NetworkNotification({
               </>
             ) : (
               <>
-                <AlertTriangle className="h-3 w-3 mr-1" />
+                <ArrowRightLeft className="h-3 w-3 mr-1" />
                 Switch to Base Sepolia
               </>
             )}

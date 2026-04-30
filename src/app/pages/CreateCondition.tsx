@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Loader2, ExternalLink, AlertTriangle } from "lucide-react";
+import { Loader2, ExternalLink, AlertTriangle, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -30,7 +30,14 @@ import { keccak256, toHex, encodeAbiParameters } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
 import { uploadFileToFilebase } from "../../utils/filebase";
+import { friendlyError } from "../../utils/friendlyError";
 import NetworkMonitor from "../components/NetworkMonitor";
+import { WalletConnect } from "../components/WalletConnect";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "../components/ui/tooltip";
 
 enum QuestionType {
   DifficultyThreshold = 0,
@@ -51,6 +58,7 @@ function parseTToRaw(tStr: string): bigint | null {
 }
 
 export default function CreateCondition() {
+  useEffect(() => { document.title = "Create Condition — Doefin"; }, []);
   const navigate = useNavigate();
   const { address, isConnected } = useAccount();
   const { currentBlock } = useWeb3();
@@ -162,7 +170,7 @@ export default function CreateCondition() {
 
   useEffect(() => {
     if (writeError) {
-      toast.error("Transaction failed: " + (writeError as Error).message);
+      toast.error(friendlyError(writeError));
     }
   }, [writeError]);
 
@@ -247,7 +255,7 @@ export default function CreateCondition() {
         ],
       });
     } catch (err) {
-      toast.error("Failed to create condition: " + (err as Error).message);
+      toast.error(friendlyError(err));
     }
   };
 
@@ -292,16 +300,30 @@ export default function CreateCondition() {
 
         {!isConnected ? (
           <div className="bg-surface border border-border rounded-xl p-12 text-center">
-            <p className="text-text-secondary text-lg mb-4">
-              Please connect your wallet to create a condition
+            <p className="text-text-secondary text-lg mb-2">
+              Connect your wallet to get started
             </p>
-            <p className="text-text-tertiary text-sm">
-              Use the Connect Wallet button in the top right corner
+            <p className="text-text-tertiary text-sm mb-6">
+              It's free — use a test wallet. No real money on Base Sepolia.
             </p>
+            <div className="flex justify-center">
+              <WalletConnect />
+            </div>
           </div>
         ) : (
           <>
-            {!contractsConfigured && (
+              {/* CC-01: Onboarding callout */}
+            <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-xl">
+              <h3 className="text-sm font-semibold text-text-primary mb-1">What is a Condition?</h3>
+              <p className="text-xs text-text-secondary">
+                A condition is a yes/no question about Bitcoin's mining difficulty. You set a
+                threshold value and a target block number. When that block is mined, the answer
+                is determined automatically by the blockchain. You and others can then bet YES or
+                NO by splitting tokens based on this outcome.
+              </p>
+            </div>
+
+          {!contractsConfigured && (
               <div className="mb-6 p-4 bg-danger/10 border border-danger/30 rounded-xl flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-danger flex-shrink-0 mt-0.5" />
                 <div>
@@ -329,12 +351,26 @@ export default function CreateCondition() {
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Threshold */}
                   <div className="space-y-2">
-                    <Label
-                      htmlFor="threshold"
-                      className="text-text-primary font-medium"
-                    >
-                      Difficulty Threshold *
-                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Label
+                        htmlFor="threshold"
+                        className="text-text-primary font-medium"
+                      >
+                        Difficulty Threshold *
+                      </Label>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="h-4 w-4 text-text-tertiary cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                          <p>
+                            Difficulty measures how hard it is to mine Bitcoin blocks.
+                            "T" = trillions of units. Set higher than current if you
+                            predict mining will get harder.
+                          </p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </div>
                     <div className="relative">
                       <Input
                         id="threshold"
@@ -349,25 +385,31 @@ export default function CreateCondition() {
                         value={thresholdT}
                         onChange={(e) => setThresholdT(e.target.value)}
                         className="bg-elevated border-border text-text-primary pr-10 focus:ring-primary focus:border-primary"
+                        aria-describedby="threshold-helper"
                         required
                       />
                       <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary text-sm font-medium">
                         T
                       </span>
                     </div>
-                    <p className="text-xs text-text-tertiary">
+                    <p id="threshold-helper" className="text-xs text-text-tertiary">
                       {difficultyLoading
                         ? "Loading Bitcoin difficulty..."
                         : difficultyError
                           ? difficultyError
                           : bitcoinDifficultyFormatted
-                            ? `Current: ${bitcoinDifficultyFormatted}`
-                            : null}
+                            ? `Current difficulty: ${bitcoinDifficultyFormatted} — set higher if you think mining gets harder`
+                            : "Set higher than current difficulty if you predict mining will get harder"}
                     </p>
                     {thresholdRaw !== null && (
-                      <p className="text-xs text-text-tertiary font-mono">
-                        = {thresholdRaw.toLocaleString()} (raw on-chain value)
-                      </p>
+                      <details className="group">
+                        <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                          Technical details ›
+                        </summary>
+                        <p className="text-xs text-text-tertiary font-mono mt-1">
+                          Raw on-chain value: {thresholdRaw.toLocaleString()}
+                        </p>
+                      </details>
                     )}
                   </div>
 
@@ -379,6 +421,25 @@ export default function CreateCondition() {
                     >
                       Target Bitcoin Block Height *
                     </Label>
+                    {/* Quick-set buttons */}
+                    {bitcoinBlockHeight > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {[
+                          { label: "Next epoch (~2 wks)", blocks: 2016 },
+                          { label: "+1 Month", blocks: 4320 },
+                          { label: "+3 Months", blocks: 12960 },
+                        ].map(({ label, blocks }) => (
+                          <button
+                            key={blocks}
+                            type="button"
+                            onClick={() => setBlockHeight((bitcoinBlockHeight + blocks).toString())}
+                            className="text-xs px-2 py-1 rounded border border-border bg-elevated hover:border-primary/50 hover:bg-primary/5 text-text-secondary hover:text-text-primary transition-colors"
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                     <Input
                       id="blockHeight"
                       type="number"
@@ -390,13 +451,23 @@ export default function CreateCondition() {
                       value={blockHeight}
                       onChange={(e) => setBlockHeight(e.target.value)}
                       className="bg-elevated border-border text-text-primary focus:ring-primary focus:border-primary"
+                      aria-describedby="blockheight-helper"
                       required
                     />
-                    <div className="space-y-1">
+                    <div id="blockheight-helper" className="space-y-1">
                       {!bitcoinLoading && bitcoinBlockHeight > 0 && (
                         <p className="text-xs text-text-tertiary">
-                          Current Bitcoin block: ~
-                          {bitcoinBlockHeight.toLocaleString()}
+                          Current: ~{bitcoinBlockHeight.toLocaleString()}
+                          {blockHeight && !isNaN(parseInt(blockHeight)) && parseInt(blockHeight) > bitcoinBlockHeight && (() => {
+                            const blocksAway = parseInt(blockHeight) - bitcoinBlockHeight;
+                            const msAway = blocksAway * 10 * 60 * 1000;
+                            const estDate = new Date(Date.now() + msAway);
+                            return (
+                              <span className="text-primary ml-2">
+                                ≈ {estDate.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })} (estimated)
+                              </span>
+                            );
+                          })()}
                         </p>
                       )}
                       {bitcoinLoading && (
@@ -412,16 +483,19 @@ export default function CreateCondition() {
                     </div>
                   </div>
 
-                  {/* Generated Question ID */}
+                  {/* CC-03: Question ID hidden in developer details */}
                   {questionId && (
-                    <div className="p-3 bg-primary/5 border border-primary/30 rounded-lg">
-                      <p className="text-xs text-text-secondary mb-1">
-                        Generated Question ID
-                      </p>
-                      <code className="text-xs font-mono text-text-primary break-all block">
-                        {questionId}
-                      </code>
-                    </div>
+                    <details className="group">
+                      <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                        Developer info ›
+                      </summary>
+                      <div className="mt-2 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                        <p className="text-xs text-text-secondary mb-1">Generated Question ID</p>
+                        <code className="text-xs font-mono text-text-primary break-all block">
+                          {questionId}
+                        </code>
+                      </div>
+                    </details>
                   )}
 
                   <Button
@@ -433,7 +507,7 @@ export default function CreateCondition() {
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                         {isUploading
-                          ? "Uploading to IPFS..."
+                          ? "Saving market data..."
                           : "Creating Condition..."}
                       </>
                     ) : (
@@ -474,65 +548,81 @@ export default function CreateCondition() {
         <DialogContent className="bg-elevated border-border max-w-md">
           <DialogHeader>
             <DialogTitle className="text-2xl text-text-primary">
-              Condition Created Successfully!
+              Your Prediction is Live!
             </DialogTitle>
             <DialogDescription className="text-text-secondary">
-              Your condition has been created on-chain. It will appear in the
-              markets list within ~30 seconds once indexed.
+              Created on Base Sepolia. Appears in Markets within ~30 seconds.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label className="text-text-secondary text-sm">Condition ID</Label>
-              {conditionIdIsFallback && (
-                <p className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1">
-                  Could not read conditionId from receipt — copy from the transaction logs on Basescan.
-                </p>
-              )}
-              <CopyableHash hash={conditionId} />
+            {/* Human-readable summary */}
+            <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
+              <p className="text-xs text-text-secondary mb-1">Your prediction</p>
+              <p className="text-sm font-medium text-text-primary">{capturedQuestion}</p>
             </div>
-            <div className="space-y-2">
-              <Label className="text-text-secondary text-sm">Question ID</Label>
-              <CopyableHash hash={resolvedQuestionId} />
+
+            {/* What's next */}
+            <div className="p-4 bg-success/5 border border-success/30 rounded-lg space-y-1">
+              <p className="text-xs font-semibold text-success">What's next?</p>
+              <p className="text-xs text-text-secondary">
+                Click "Get YES/NO Tokens" to split test tokens into YES and NO positions and start trading.
+              </p>
             </div>
-            {hash && (
-              <div className="space-y-2">
-                <Label className="text-text-secondary text-sm">
-                  Transaction Hash
-                </Label>
-                <div className="flex items-center gap-2">
-                  <CopyableHash hash={hash} />
-                  <a
-                    href={`https://sepolia.basescan.org/tx/${hash}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline flex items-center gap-1"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
+
+            {/* Technical details — collapsed by default */}
+            <details className="group">
+              <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
+                Technical details ›
+              </summary>
+              <div className="mt-2 space-y-2">
+                <div className="space-y-1">
+                  <Label className="text-text-secondary text-xs">Condition ID</Label>
+                  {conditionIdIsFallback && (
+                    <p className="text-xs text-yellow-400 bg-yellow-500/10 border border-yellow-500/30 rounded px-2 py-1">
+                      Could not read conditionId from receipt — copy from the transaction logs on Basescan.
+                    </p>
+                  )}
+                  <CopyableHash hash={conditionId} />
                 </div>
+                <div className="space-y-1">
+                  <Label className="text-text-secondary text-xs">Question ID</Label>
+                  <CopyableHash hash={resolvedQuestionId} />
+                </div>
+                {hash && (
+                  <div className="space-y-1">
+                    <Label className="text-text-secondary text-xs">Transaction</Label>
+                    <div className="flex items-center gap-2">
+                      <CopyableHash hash={hash} />
+                      <a
+                        href={`https://sepolia.basescan.org/tx/${hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:underline flex items-center gap-1"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-            <div className="p-4 bg-background border border-border rounded-lg">
-              <p className="text-sm text-text-primary">{capturedQuestion}</p>
-            </div>
+            </details>
           </div>
           <div className="flex gap-3">
             <Button
               variant="outline"
-              onClick={() => setShowSuccessModal(false)}
+              onClick={() => { setShowSuccessModal(false); navigate("/markets"); }}
               className="flex-1 bg-background border-border"
             >
-              Close
+              View Markets
             </Button>
             <Button
               onClick={() => {
                 setShowSuccessModal(false);
-                navigate("/create-market");
+                navigate(`/create-market?conditionId=${conditionId}`);
               }}
               className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              Create Market
+              Get YES/NO Tokens
             </Button>
           </div>
         </DialogContent>
