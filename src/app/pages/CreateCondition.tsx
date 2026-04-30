@@ -439,10 +439,12 @@ export default function CreateCondition() {
                                       style={isActive ? { borderColor: "var(--primary)", boxShadow: "0 0 0 1px var(--primary)" } : undefined}
                                       aria-pressed={isActive}
                                     >
-                                      {isActive && <Check className="h-3.5 w-3.5" />}
                                       <span className="text-sm font-semibold">{label}</span>
                                       <span className="text-xs opacity-70">
                                         {presetDate.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
+                                      </span>
+                                      <span className="text-[10px] font-mono opacity-50 tabular-nums">
+                                        #{(bitcoinBlockHeight + blocks).toLocaleString()}
                                       </span>
                                     </button>
                                   );
