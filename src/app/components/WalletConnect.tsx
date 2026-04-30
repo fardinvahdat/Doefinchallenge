@@ -104,7 +104,7 @@ export function WalletConnect() {
                         )}
                       </div>
                     )}
-                    <span className="text-xs">
+                    <span className="text-xs hidden md:inline">
                       {chain.name}
                     </span>
                   </button>

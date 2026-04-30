@@ -161,7 +161,7 @@ export default function Architecture() {
                 <CodeBlock>
                   <code>ConditionalTokensFacet.splitPosition()</code>
                 </CodeBlock>
-                <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
                   <ParamBox label="collateralToken" value="address" />
                   <ParamBox label="conditionId" value="bytes32" />
                   <ParamBox label="amount" value="uint256" />
@@ -179,7 +179,10 @@ export default function Architecture() {
             color="success"
           >
             <div className="space-y-3">
-              <EventBox event="PositionSplit" params="owner, conditionId, amount" />
+              <EventBox
+                event="PositionSplit"
+                params="owner, conditionId, amount"
+              />
               <EventBox
                 event="PositionPairsRegistered"
                 params="conditionId, yesPositionId, noPositionId"
@@ -239,7 +242,7 @@ export default function Architecture() {
         </div>
 
         {/* Technical Stack */}
-        <div className="mt-12 p-6 bg-surface border border-border rounded-xl">
+        <div className="mt-12 md:p-6 p-2 bg-surface border border-border rounded-xl">
           <h3 className="text-lg font-semibold mb-4 text-text-primary">
             Technical Stack
           </h3>
@@ -278,8 +281,8 @@ export default function Architecture() {
         </div>
 
         {/* Network Info */}
-        <div className="mt-8 p-6 bg-elevated border border-border rounded-xl">
-          <div className="flex items-center justify-between">
+        <div className="mt-8 md:p-6 p-2 bg-elevated border border-border rounded-xl">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <h4 className="text-sm font-semibold text-text-primary mb-1">
                 Network Configuration
@@ -288,7 +291,7 @@ export default function Architecture() {
                 All transactions execute on Base Sepolia testnet
               </p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-shrink-0">
               <div className="px-4 py-2 rounded-lg bg-success/10 border border-success/30">
                 <p className="text-xs text-text-secondary mb-0.5">Chain ID</p>
                 <p className="text-sm font-mono font-semibold text-success">
@@ -299,7 +302,7 @@ export default function Architecture() {
                 href="https://sepolia.basescan.org"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm font-medium hover:bg-primary/20 transition-colors"
+                className="px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-primary text-sm font-medium hover:bg-primary/20 transition-colors whitespace-nowrap"
               >
                 View on Basescan →
               </a>
@@ -333,12 +336,12 @@ function ArchitectureStep({
   return (
     <div className="relative">
       <div className="absolute -left-3 top-0 w-1 h-full bg-gradient-to-b from-primary via-accent to-success opacity-30 rounded-full" />
-      <div className="pl-8">
+      <div className="md:pl-8">
         <div className="flex items-center gap-3 mb-4">
           <div className={`p-2 rounded-lg ${colorClasses[color]}`}>{icon}</div>
           <h2 className="text-xl font-bold text-text-primary">{title}</h2>
         </div>
-        <div className="bg-surface border border-border rounded-xl p-6">
+        <div className="bg-surface border border-border rounded-xl md:p-6 p-2">
           {children}
         </div>
       </div>
@@ -359,8 +362,8 @@ function FlowArrow() {
 
 function CodeBlock({ children }: { children: React.ReactNode }) {
   return (
-    <div className="px-3 py-2 bg-background border border-border/50 rounded-lg font-mono text-xs text-text-primary">
-      {children}
+    <div className="px-3 py-2 bg-background border border-border/50 rounded-lg font-mono text-xs text-text-primary overflow-x-auto">
+      <div className="whitespace-nowrap">{children}</div>
     </div>
   );
 }
@@ -383,7 +386,7 @@ function EventBox({ event, params }: { event: string; params: string }) {
           {event}
         </code>
       </div>
-      <p className="text-xs text-text-tertiary font-mono ml-3.5">{params}</p>
+      <p className="text-xs text-text-tertiary font-mono ml-3.5 break-all">{params}</p>
     </div>
   );
 }

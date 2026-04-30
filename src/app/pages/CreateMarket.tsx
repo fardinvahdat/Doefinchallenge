@@ -73,11 +73,16 @@ function TokenCard({
   return (
     <button
       onClick={() => onSelect(token)}
+      aria-pressed={selected}
       className={`p-4 md:p-6 rounded-xl border-2 text-left transition-all ${
         selected
-          ? "border-accent bg-accent/5 shadow-[0_0_20px_rgba(34,211,238,0.2)]"
+          ? "bg-accent/5"
           : "border-border bg-elevated hover:border-accent/50"
       }`}
+      style={selected ? {
+        borderColor: "var(--accent)",
+        boxShadow: "0 0 20px rgba(245,158,11,0.18), 0 0 0 1px var(--accent)",
+      } : undefined}
     >
       <div className="flex items-start justify-between mb-3">
         <div>
