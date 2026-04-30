@@ -2,63 +2,74 @@
 
 :root {
   --font-size: 16px;
-  --background: #0A0A0A;
-  --foreground: #F8F8F8;
-  --surface: #121212;
-  --elevated: #1A1A1A;
-  --border: #222222;
-  --primary: #A855F7;
-  --primary-foreground: #0A0A0A;
-  --accent: #22D3EE;
-  --accent-foreground: #0A0A0A;
-  --success: #22C55E;
-  --danger: #EF4444;
-  --text-primary: #F8F8F8;
-  --text-secondary: #A3A3A3;
-  --text-tertiary: #808080;
-  --card: #121212;
-  --card-foreground: #F8F8F8;
-  --popover: #1A1A1A;
-  --popover-foreground: #F8F8F8;
-  --secondary: #1A1A1A;
-  --secondary-foreground: #F8F8F8;
-  --muted: #1A1A1A;
-  --muted-foreground: #A3A3A3;
-  --destructive: #EF4444;
-  --destructive-foreground: #F8F8F8;
-  --input: #121212;
-  --ring: #A855F7;
-  --radius: 0.75rem;
+
+  /* ── Backgrounds ─────────────────────────────────────────────────────── */
+  --background: #070A12;   /* page bg — deep midnight navy, not flat black */
+  --surface:    #0C1020;   /* card / panel surfaces                        */
+  --elevated:   #131828;   /* dropdowns, modals, hover states              */
+  --border:     #1E2B3C;   /* visible but understated navy border          */
+
+  /* ── Primary (CTAs, active ring) ────────────────────────────────────── */
+  --primary:            #6366F1;   /* indigo-500: vibrant, non-neon        */
+  --primary-foreground: #FFFFFF;
+
+  /* ── Accent (badges, warnings, Bitcoin warmth) ───────────────────────── */
+  --accent:            #F59E0B;   /* amber-500: ties back to Bitcoin brand  */
+  --accent-foreground: #070A12;
+
+  /* ── Semantic ────────────────────────────────────────────────────────── */
+  --success:    #34D399;   /* emerald-400: YES / confirmed                 */
+  --danger:     #FB7185;   /* rose-400: NO / error                         */
+
+  /* ── Text hierarchy ──────────────────────────────────────────────────── */
+  --text-primary:   #F1F5F9;   /* slate-100: easy on eyes, not harsh white */
+  --text-secondary: #94A3B8;   /* slate-400                                */
+  --text-tertiary:  #64748B;   /* slate-500                                */
+
+  /* ── Radix / Tailwind semantic aliases ───────────────────────────────── */
+  --foreground:                #F1F5F9;
+  --card:                      #0C1020;
+  --card-foreground:           #F1F5F9;
+  --popover:                   #131828;
+  --popover-foreground:        #F1F5F9;
+  --secondary:                 #131828;
+  --secondary-foreground:      #F1F5F9;
+  --muted:                     #131828;
+  --muted-foreground:          #94A3B8;
+  --destructive:               #FB7185;
+  --destructive-foreground:    #F1F5F9;
+  --input:                     #0C1020;
+  --ring:                      #6366F1;
+  --radius:                    0.75rem;
 }
 
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-surface: var(--surface);
-  --color-elevated: var(--elevated);
-  --color-border: var(--border);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-success: var(--success);
-  --color-danger: var(--danger);
-  --color-text-primary: var(--text-primary);
-  --color-text-secondary: var(--text-secondary);
-  --color-text-tertiary: var(--text-tertiary);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-destructive: var(--destructive);
+  --color-background:             var(--background);
+  --color-foreground:             var(--foreground);
+  --color-surface:                var(--surface);
+  --color-elevated:               var(--elevated);
+  --color-border:                 var(--border);
+  --color-card:                   var(--card);
+  --color-card-foreground:        var(--card-foreground);
+  --color-popover:                var(--popover);
+  --color-popover-foreground:     var(--popover-foreground);
+  --color-primary:                var(--primary);
+  --color-primary-foreground:     var(--primary-foreground);
+  --color-accent:                 var(--accent);
+  --color-accent-foreground:      var(--accent-foreground);
+  --color-success:                var(--success);
+  --color-danger:                 var(--danger);
+  --color-text-primary:           var(--text-primary);
+  --color-text-secondary:         var(--text-secondary);
+  --color-text-tertiary:          var(--text-tertiary);
+  --color-secondary:              var(--secondary);
+  --color-secondary-foreground:   var(--secondary-foreground);
+  --color-muted:                  var(--muted);
+  --color-muted-foreground:       var(--muted-foreground);
+  --color-destructive:            var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-input:                  var(--input);
+  --color-ring:                   var(--ring);
   --radius-sm: 0.5rem;
   --radius-md: 0.75rem;
   --radius-lg: 1rem;
@@ -81,11 +92,6 @@
   code, pre, .font-mono {
     font-family: 'JetBrains Mono', 'Fira Code', monospace;
   }
-
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
 
   html {
     font-size: var(--font-size);
@@ -134,77 +140,65 @@
   }
 }
 
-/* RainbowKit Custom Styling */
+/* RainbowKit — Midnight Indigo theme */
 @layer base {
-  /* ========================================
-     DOEFIN V2 RAINBOWKIT THEME
-     Cyber-Neon Dark Institutional Design
-     ======================================== */
-  
-  /* Modal Container - Main backdrop */
   [data-rk] > div > div {
-    background: rgba(10, 10, 10, 0.95) !important;
-    backdrop-filter: blur(12px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+    background: rgba(7, 10, 18, 0.96) !important;
+    backdrop-filter: blur(12px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(12px) saturate(160%) !important;
   }
 
-  /* Modal Content Box */
   [data-rk] [role="dialog"] {
-    background: #0A0A0A !important;
-    border: 1px solid #222222 !important;
-    box-shadow: 
-      0 0 0 1px rgba(168, 85, 247, 0.1),
-      0 8px 32px rgba(0, 0, 0, 0.8),
-      0 0 64px rgba(168, 85, 247, 0.15) !important;
+    background: #070A12 !important;
+    border: 1px solid #1E2B3C !important;
+    box-shadow:
+      0 0 0 1px rgba(99, 102, 241, 0.12),
+      0 8px 32px rgba(0, 0, 0, 0.75),
+      0 0 64px rgba(99, 102, 241, 0.08) !important;
     border-radius: 12px !important;
     padding: 0 !important;
   }
 
-  /* Modal Header */
   [data-rk] [role="dialog"] > div:first-child {
-    background: linear-gradient(180deg, #121212 0%, #0A0A0A 100%) !important;
-    border-bottom: 1px solid #222222 !important;
+    background: linear-gradient(180deg, #0C1020 0%, #070A12 100%) !important;
+    border-bottom: 1px solid #1E2B3C !important;
     padding: 24px !important;
   }
 
-  /* Modal Title */
   [data-rk] [role="dialog"] h1,
   [data-rk] [role="dialog"] h2 {
-    color: #F8F8F8 !important;
+    color: #F1F5F9 !important;
     font-size: 18px !important;
     font-weight: 600 !important;
     letter-spacing: -0.02em !important;
     margin: 0 !important;
   }
 
-  /* Close Button */
   [data-rk] button[aria-label*="Close"] {
-    background: #1A1A1A !important;
-    border: 1px solid #222222 !important;
+    background: #131828 !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 6px !important;
     width: 32px !important;
     height: 32px !important;
     transition: all 0.2s ease !important;
-    color: #A3A3A3 !important;
+    color: #94A3B8 !important;
   }
 
   [data-rk] button[aria-label*="Close"]:hover {
-    background: #222222 !important;
-    border-color: #A855F7 !important;
-    color: #A855F7 !important;
-    box-shadow: 0 0 16px rgba(168, 85, 247, 0.3) !important;
+    background: #1E2B3C !important;
+    border-color: #818CF8 !important;
+    color: #818CF8 !important;
+    box-shadow: 0 0 16px rgba(129, 140, 248, 0.25) !important;
   }
 
-  /* Modal Body */
   [data-rk] [role="dialog"] > div:nth-child(2) {
-    background: #0A0A0A !important;
+    background: #070A12 !important;
     padding: 24px !important;
   }
 
-  /* Wallet Option Buttons */
   [data-rk] button[type="button"]:not([aria-label*="Close"]) {
-    background: linear-gradient(180deg, #121212 0%, #0D0D0D 100%) !important;
-    border: 1px solid #222222 !important;
+    background: linear-gradient(180deg, #0C1020 0%, #090D1A 100%) !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 8px !important;
     padding: 16px !important;
     margin: 0 0 4px 0 !important;
@@ -213,11 +207,11 @@
   }
 
   [data-rk] button[type="button"]:not([aria-label*="Close"]):hover {
-    background: linear-gradient(180deg, #1A1A1A 0%, #121212 100%) !important;
-    border-color: #A855F7 !important;
-    box-shadow: 
-      0 0 0 1px rgba(168, 85, 247, 0.3),
-      0 0 24px rgba(168, 85, 247, 0.2),
+    background: linear-gradient(180deg, #131828 0%, #0C1020 100%) !important;
+    border-color: #6366F1 !important;
+    box-shadow:
+      0 0 0 1px rgba(99, 102, 241, 0.25),
+      0 0 24px rgba(99, 102, 241, 0.15),
       0 4px 12px rgba(0, 0, 0, 0.4) !important;
     transform: translateY(-1px) !important;
   }
@@ -226,27 +220,24 @@
     transform: translateY(0) !important;
   }
 
-  /* Wallet Button - Selected/Recent */
   [data-rk] button[type="button"][data-recent="true"] {
-    border-color: #A855F7 !important;
-    background: linear-gradient(180deg, #1A1A1A 0%, #121212 100%) !important;
-    box-shadow: 
-      0 0 0 1px rgba(168, 85, 247, 0.3),
-      0 0 20px rgba(168, 85, 247, 0.15) !important;
+    border-color: #6366F1 !important;
+    background: linear-gradient(180deg, #131828 0%, #0C1020 100%) !important;
+    box-shadow:
+      0 0 0 1px rgba(99, 102, 241, 0.25),
+      0 0 20px rgba(99, 102, 241, 0.12) !important;
   }
 
-  /* Wallet Name Text */
   [data-rk] button[type="button"] span {
-    color: #F8F8F8 !important;
+    color: #F1F5F9 !important;
     font-size: 14px !important;
     font-weight: 500 !important;
   }
 
-  /* "Recent" badge */
   [data-rk] [data-rk] > div > div > span {
-    background: rgba(168, 85, 247, 0.2) !important;
-    color: #A855F7 !important;
-    border: 1px solid rgba(168, 85, 247, 0.3) !important;
+    background: rgba(99, 102, 241, 0.15) !important;
+    color: #818CF8 !important;
+    border: 1px solid rgba(99, 102, 241, 0.3) !important;
     border-radius: 4px !important;
     padding: 2px 8px !important;
     font-size: 11px !important;
@@ -255,20 +246,19 @@
     letter-spacing: 0.05em !important;
   }
 
-  /* Wallet Icons */
   [data-rk] button[type="button"] img {
     border-radius: 8px !important;
     width: 40px !important;
     height: 40px !important;
   }
 
-  /* "Get" Button for wallet installation */
+  /* Install links — amber accent */
   [data-rk] a[href*="metamask"],
   [data-rk] a[href*="rainbow"],
   [data-rk] a[href*="coinbase"] {
-    background: rgba(34, 211, 238, 0.1) !important;
-    border: 1px solid rgba(34, 211, 238, 0.3) !important;
-    color: #22D3EE !important;
+    background: rgba(245, 158, 11, 0.1) !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+    color: #F59E0B !important;
     border-radius: 6px !important;
     padding: 6px 12px !important;
     font-size: 12px !important;
@@ -279,176 +269,158 @@
   [data-rk] a[href*="metamask"]:hover,
   [data-rk] a[href*="rainbow"]:hover,
   [data-rk] a[href*="coinbase"]:hover {
-    background: rgba(34, 211, 238, 0.2) !important;
-    border-color: #22D3EE !important;
-    box-shadow: 0 0 16px rgba(34, 211, 238, 0.3) !important;
+    background: rgba(245, 158, 11, 0.18) !important;
+    border-color: #F59E0B !important;
+    box-shadow: 0 0 16px rgba(245, 158, 11, 0.25) !important;
   }
 
-  /* Connecting State */
   [data-rk] [role="dialog"] > div > div > div[style*="height"] {
-    background: #0A0A0A !important;
+    background: #070A12 !important;
   }
 
-  /* Connecting Spinner */
   [data-rk] [role="dialog"] svg[viewBox="0 0 48 48"] {
-    filter: drop-shadow(0 0 8px rgba(168, 85, 247, 0.5)) !important;
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.5)) !important;
   }
 
-  /* Connecting Text */
   [data-rk] [role="dialog"] > div > div > div > div > div {
-    color: #F8F8F8 !important;
+    color: #F1F5F9 !important;
     font-size: 14px !important;
   }
 
-  /* QR Code Container */
   [data-rk] [role="dialog"] > div > div > div > div > svg {
-    border: 8px solid #121212 !important;
+    border: 8px solid #0C1020 !important;
     border-radius: 16px !important;
     padding: 16px !important;
     background: #FFFFFF !important;
   }
 
-  /* QR Code Wrapper */
   [data-rk] > div > div > div > div[style*="border-radius"] {
-    background: #121212 !important;
-    border: 1px solid #222222 !important;
+    background: #0C1020 !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 20px !important;
     padding: 16px !important;
-    box-shadow: 
-      0 0 0 1px rgba(168, 85, 247, 0.1),
-      0 0 32px rgba(168, 85, 247, 0.1) !important;
+    box-shadow:
+      0 0 0 1px rgba(99, 102, 241, 0.08),
+      0 0 32px rgba(99, 102, 241, 0.08) !important;
   }
 
-  /* Account Modal - Connected State */
   [data-rk] [role="dialog"][aria-label*="Account"] {
-    background: #0A0A0A !important;
+    background: #070A12 !important;
   }
 
-  /* Account Address Display */
   [data-rk] [role="dialog"] button[aria-label*="Copy"] {
-    background: #121212 !important;
-    border: 1px solid #222222 !important;
+    background: #0C1020 !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 8px !important;
     padding: 12px 16px !important;
-    font-family: 'Monaco', 'Courier New', monospace !important;
+    font-family: 'JetBrains Mono', 'Monaco', monospace !important;
     font-size: 14px !important;
-    color: #F8F8F8 !important;
+    color: #F1F5F9 !important;
     transition: all 0.2s ease !important;
   }
 
   [data-rk] [role="dialog"] button[aria-label*="Copy"]:hover {
-    border-color: #A855F7 !important;
-    box-shadow: 0 0 16px rgba(168, 85, 247, 0.2) !important;
+    border-color: #6366F1 !important;
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.18) !important;
   }
 
-  /* Balance Display */
   [data-rk] [role="dialog"] > div > div > div:nth-child(2) {
-    color: #A3A3A3 !important;
+    color: #94A3B8 !important;
     font-size: 13px !important;
   }
 
-  /* Action Buttons in Account Modal */
   [data-rk] [role="dialog"] > div:last-child button {
-    background: #121212 !important;
-    border: 1px solid #222222 !important;
+    background: #0C1020 !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 8px !important;
     padding: 12px 20px !important;
-    color: #F8F8F8 !important;
+    color: #F1F5F9 !important;
     font-size: 14px !important;
     font-weight: 500 !important;
     transition: all 0.2s ease !important;
   }
 
   [data-rk] [role="dialog"] > div:last-child button:hover {
-    background: #1A1A1A !important;
-    border-color: #A855F7 !important;
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2) !important;
+    background: #131828 !important;
+    border-color: #6366F1 !important;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.18) !important;
   }
 
-  /* Disconnect Button - Danger Style */
   [data-rk] button[aria-label*="Disconnect"],
   [data-rk] button:has(svg[viewBox="0 0 15 15"]) {
-    background: rgba(239, 68, 68, 0.1) !important;
-    border-color: rgba(239, 68, 68, 0.3) !important;
-    color: #EF4444 !important;
+    background: rgba(251, 113, 133, 0.08) !important;
+    border-color: rgba(251, 113, 133, 0.25) !important;
+    color: #FB7185 !important;
   }
 
   [data-rk] button[aria-label*="Disconnect"]:hover,
   [data-rk] button:has(svg[viewBox="0 0 15 15"]):hover {
-    background: rgba(239, 68, 68, 0.2) !important;
-    border-color: #EF4444 !important;
-    box-shadow: 0 0 20px rgba(239, 68, 68, 0.2) !important;
+    background: rgba(251, 113, 133, 0.15) !important;
+    border-color: #FB7185 !important;
+    box-shadow: 0 0 20px rgba(251, 113, 133, 0.18) !important;
   }
 
-  /* Chain/Network Selector */
   [data-rk] [role="dialog"][aria-label*="Chain"] button {
-    background: #121212 !important;
-    border: 1px solid #222222 !important;
+    background: #0C1020 !important;
+    border: 1px solid #1E2B3C !important;
     border-radius: 8px !important;
     padding: 16px !important;
     margin-bottom: 8px !important;
   }
 
   [data-rk] [role="dialog"][aria-label*="Chain"] button:hover {
-    background: #1A1A1A !important;
-    border-color: #A855F7 !important;
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.2) !important;
+    background: #131828 !important;
+    border-color: #6366F1 !important;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.18) !important;
   }
 
-  /* Chain Icon */
   [data-rk] [role="dialog"] img[alt*="chain"] {
     border-radius: 50% !important;
-    border: 2px solid #222222 !important;
+    border: 2px solid #1E2B3C !important;
   }
 
-  /* Loading States */
   [data-rk] [role="dialog"] [data-testid="loader"] {
-    border-color: rgba(168, 85, 247, 0.2) !important;
-    border-top-color: #A855F7 !important;
+    border-color: rgba(99, 102, 241, 0.2) !important;
+    border-top-color: #6366F1 !important;
   }
 
-  /* Text Elements */
   [data-rk] span,
   [data-rk] div {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
   }
 
-  /* Secondary Text */
   [data-rk] [role="dialog"] > div > div > div:not(:first-child) {
-    color: #A3A3A3 !important;
+    color: #94A3B8 !important;
   }
 
-  /* Links */
   [data-rk] a {
-    color: #22D3EE !important;
+    color: #818CF8 !important;
     text-decoration: none !important;
   }
 
   [data-rk] a:hover {
-    color: #67E8F9 !important;
+    color: #A5B4FC !important;
     text-decoration: underline !important;
   }
 
-  /* Scrollbar for wallet list */
   [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar {
     width: 8px !important;
   }
 
   [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-track {
-    background: #0A0A0A !important;
+    background: #070A12 !important;
     border-radius: 4px !important;
   }
 
   [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-thumb {
-    background: #222222 !important;
+    background: #1E2B3C !important;
     border-radius: 4px !important;
   }
 
   [data-rk] [role="dialog"] > div:nth-child(2)::-webkit-scrollbar-thumb:hover {
-    background: #333333 !important;
+    background: #2A3A50 !important;
   }
 
-  /* Mobile Responsive */
   @media (max-width: 768px) {
     [data-rk] [role="dialog"] {
       margin: 16px !important;
@@ -466,31 +438,22 @@
     }
   }
 
-  /* Animations */
   [data-rk] [role="dialog"] {
-    animation: slideUp 0.3s ease-out !important;
+    animation: rkSlideUp 0.25s ease-out !important;
   }
 
-  @keyframes slideUp {
-    from {
-      opacity: 0;
-      transform: translateY(20px) scale(0.95);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
+  @keyframes rkSlideUp {
+    from { opacity: 0; transform: translateY(16px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)   scale(1);    }
   }
 
-  /* Focus States */
   [data-rk] button:focus-visible {
-    outline: 2px solid #A855F7 !important;
+    outline: 2px solid #6366F1 !important;
     outline-offset: 2px !important;
   }
 
-  /* Disabled States */
   [data-rk] button:disabled {
-    opacity: 0.5 !important;
+    opacity: 0.45 !important;
     cursor: not-allowed !important;
   }
 }
