@@ -39,8 +39,7 @@ interface ConditionsResponse {
 }
 
 function buildParams(status: ConditionStatus): Record<string, string> {
-  // 200 items per page — large enough for current usage while not unbounded
-  const p: Record<string, string> = { page_size: "200" };
+  const p: Record<string, string> = { page_size: "100" };
   if (status === "active") p.active_only = "true";
   if (status === "resolved") { p.active_only = "false"; p.resolved_only = "true"; }
   if (status === "all") p.active_only = "false";

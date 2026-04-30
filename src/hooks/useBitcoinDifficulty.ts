@@ -29,16 +29,16 @@ export function useBitcoinDifficulty(): BitcoinDifficulty {
     const fetchBitcoinDifficulty = async () => {
       const apis = [
         {
-          url: "https://blockstream.info/api/blocks/tip/difficulty",
-          parser: (text: string) => parseFloat(text),
-        },
-        {
-          url: "https://mempool.space/api/blocks/tip/difficulty",
-          parser: (text: string) => parseFloat(text),
+          url: "https://mempool.space/api/v1/difficulty-adjustment",
+          parser: (text: string) => JSON.parse(text).currentDifficulty as number,
         },
         {
           url: "https://blockchain.info/q/getdifficulty",
           parser: (text: string) => parseFloat(text),
+        },
+        {
+          url: "https://api.blockchain.info/stats",
+          parser: (text: string) => JSON.parse(text).difficulty as number,
         },
       ];
 
