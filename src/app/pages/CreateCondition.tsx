@@ -15,23 +15,33 @@ import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { CopyableHash } from "../components/CopyableHash";
 import { StrikePreview } from "../components/StrikePreview";
-import { useAccount, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWaitForTransactionReceipt, useWriteContract, useSimulateContract } from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
 import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
 import { useInvalidateConditions } from "../../hooks/useConditions";
-import { useSafeTx } from "../../hooks/useSafeTx";
-import { keccak256, toHex, encodeAbiParameters, encodeFunctionData, type Hex } from "viem";
+import { keccak256, toHex, encodeAbiParameters, type Hex } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
 import { uploadFileToFilebase } from "../../utils/filebase";
 import { friendlyError } from "../../utils/friendlyError";
+import { useGasEstimate } from "../../hooks/useGasEstimate";
+import { GasEstimationModal } from "../components/GasEstimationModal";
 import NetworkMonitor from "../components/NetworkMonitor";
 import { WalletConnect } from "../components/WalletConnect";
 
 enum QuestionType {
   DifficultyThreshold = 0,
+  BlockHeight = 1,
 }
+
+// Dummy args used only to check the NotMarketMaker role via simulation.
+// Access control fires before any state mutation, so dummy values are safe.
+const PREFLIGHT_METADATA = encodeAbiParameters(
+  [{ type: "uint256" }, { type: "uint256" }],
+  [1n, 1n],
+);
+const PREFLIGHT_SALT = keccak256(toHex("doefin-preflight-v1"));
 
 // Converts a T-notation string (e.g. "145.15") to a raw uint256 BigInt.
 // Uses string-based parsing to avoid IEEE 754 float precision loss.
@@ -60,12 +70,35 @@ export default function CreateCondition() {
     formatted: bitcoinDifficultyFormatted,
     loading: difficultyLoading,
   } = useBitcoinDifficulty();
+  
+  const contractsConfigured =
+    CONTRACTS.Diamond !== "0x0000000000000000000000000000000000000000";
 
-  const safeTx = useSafeTx();
+  const { writeContractAsync, isPending: isTxPending, error: writeError, reset: resetWrite } = useWriteContract();
+
+  const { error: preflightError } = useSimulateContract({
+    address: CONTRACTS.Diamond,
+    abi: DIAMOND_ABI,
+    functionName: "createConditionWithMetadata",
+    args: [QuestionType.DifficultyThreshold, PREFLIGHT_METADATA, 2, "ipfs://preflight", PREFLIGHT_SALT],
+    query: {
+      enabled: isConnected && Boolean(address) && contractsConfigured,
+      retry: false,
+      staleTime: 60_000,
+    },
+  });
+
+  const isNotMarketMaker = useMemo(() => {
+    if (!preflightError) return false;
+    const msg = (preflightError?.message ?? "").toLowerCase();
+    return msg.includes("notmarketmaker") || msg.includes("not market maker");
+  }, [preflightError]);
   const [txHash, setTxHash] = useState<Hex | undefined>(undefined);
   const {
     isLoading: isConfirming,
     isSuccess,
+    isError: isTxError,
+    error: txReceiptError,
     data: receipt,
   } = useWaitForTransactionReceipt({ hash: txHash });
 
@@ -74,6 +107,7 @@ export default function CreateCondition() {
   const [blockInputOpen, setBlockInputOpen] = useState(true);
   const [metadataURI, setMetadataURI] = useState("");
   const [isUploading, setIsUploading] = useState(false);
+  const [showGasModal, setShowGasModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [conditionId, setConditionId] = useState<`0x${string}` | "">("");
@@ -84,8 +118,6 @@ export default function CreateCondition() {
   const [capturedQuestion, setCapturedQuestion] = useState("");
 
   const outcomeSlotCount = 2;
-  const contractsConfigured =
-    CONTRACTS.Diamond !== "0x0000000000000000000000000000000000000000";
 
   const thresholdRaw = useMemo(() => parseTToRaw(thresholdT), [thresholdT]);
 
@@ -99,6 +131,22 @@ export default function CreateCondition() {
     );
     return keccak256(encoded);
   }, [thresholdRaw, blockHeight]);
+
+  const conditionSalt = useMemo((): `0x${string}` | undefined => {
+    if (!questionId) return undefined;
+    return keccak256(toHex(questionId));
+  }, [questionId]);
+
+  const gasEstimate = useGasEstimate({
+    enabled: showGasModal && !!thresholdRaw && !!parseInt(blockHeight, 10) && !!conditionSalt,
+    diamond: CONTRACTS.Diamond,
+    questionType: QuestionType.DifficultyThreshold,
+    threshold: thresholdRaw ?? undefined,
+    blockHeight: parseInt(blockHeight, 10) ? BigInt(parseInt(blockHeight, 10)) : undefined,
+    outcomeSlotCount: BigInt(outcomeSlotCount),
+    metadataURI: metadataURI || "",
+    salt: conditionSalt,
+  });
 
   // Transaction success — parse event, show modal, invalidate cache
   useEffect(() => {
@@ -129,10 +177,16 @@ export default function CreateCondition() {
   }, [isSuccess, receipt, txHash, address, questionId, invalidateConditions]);
 
   useEffect(() => {
-    if (safeTx.error) {
-      toast.error(friendlyError(safeTx.error));
+    if (writeError) {
+      toast.error(friendlyError(writeError));
     }
-  }, [safeTx.error]);
+  }, [writeError]);
+
+  useEffect(() => {
+    if (isTxError && txReceiptError) {
+      toast.error(friendlyError(txReceiptError));
+    }
+  }, [isTxError, txReceiptError]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -182,32 +236,9 @@ export default function CreateCondition() {
         type: "application/json",
       });
       const result = await uploadFileToFilebase(jsonFile);
-      const ipfsUrl = result.url;
-      setMetadataURI(ipfsUrl);
-      setIsUploading(false);
-
-      const metadata = encodeAbiParameters(
-        [{ type: "uint256" }, { type: "uint256" }],
-        [thresholdRaw, BigInt(blockNum)],
-      );
-      const salt = keccak256(toHex(questionId));
-      const hash = await safeTx.mutateAsync({
-        txs: [{
-          to: CONTRACTS.Diamond,
-          data: encodeFunctionData({
-            abi: DIAMOND_ABI,
-            functionName: "createConditionWithMetadata",
-            args: [
-              QuestionType.DifficultyThreshold,
-              metadata,
-              outcomeSlotCount,
-              ipfsUrl,
-              salt,
-            ],
-          }),
-        }],
-      });
-      setTxHash(hash);
+      setMetadataURI(result.url);
+      // Open gas review modal — useGasEstimate will simulate and show the fee
+      setShowGasModal(true);
     } catch (err) {
       toast.error(friendlyError(err));
     } finally {
@@ -215,13 +246,35 @@ export default function CreateCondition() {
     }
   };
 
+  const handleGasConfirm = async () => {
+    if (!thresholdRaw || !questionId || !metadataURI || !conditionSalt) return;
+    setShowGasModal(false);
+    const blockNum = parseInt(blockHeight, 10);
+    const metadata = encodeAbiParameters(
+      [{ type: "uint256" }, { type: "uint256" }],
+      [thresholdRaw, BigInt(blockNum)],
+    );
+    try {
+      const hash = await writeContractAsync({
+        address: CONTRACTS.Diamond,
+        abi: DIAMOND_ABI,
+        functionName: "createConditionWithMetadata",
+        args: [QuestionType.DifficultyThreshold, metadata, outcomeSlotCount, metadataURI, conditionSalt],
+        gas: gasEstimate.estimatedGas > 0n ? gasEstimate.estimatedGas : 600_000n,
+      });
+      setTxHash(hash);
+    } catch (err) {
+      toast.error(friendlyError(err));
+    }
+  };
+
   const txStatus = useMemo(() => {
-    if (safeTx.isPending || isUploading) return "awaiting";
+    if (isTxPending) return "awaiting";
     if (isConfirming) return "confirming";
     if (isSuccess) return "confirmed";
-    if (safeTx.error) return "failed";
+    if (writeError || isTxError) return "failed";
     return "idle";
-  }, [safeTx.isPending, isUploading, isConfirming, isSuccess, safeTx.error]);
+  }, [isTxPending, isConfirming, isSuccess, writeError, isTxError]);
 
   useEffect(() => {
     setShowTransactionOverlay(txStatus !== "idle");
@@ -281,6 +334,22 @@ export default function CreateCondition() {
               </div>
             )}
             <NetworkMonitor />
+
+            {isNotMarketMaker && (
+              <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-yellow-400 font-semibold mb-1">Not Registered as Market Maker</p>
+                  <p className="text-sm text-text-secondary">
+                    Your address{" "}
+                    <code className="text-xs bg-elevated px-1.5 py-0.5 rounded font-mono">
+                      {address ? `${address.slice(0, 6)}…${address.slice(-4)}` : ""}
+                    </code>{" "}
+                    is not registered as a market maker on this contract. Contact the Doefin team to get access before creating conditions.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Steps + Preview layout */}
             <form onSubmit={handleSubmit}>
@@ -574,13 +643,15 @@ export default function CreateCondition() {
                             <Button
                               type="submit"
                               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                              disabled={safeTx.isPending || isConfirming || isUploading}
+                              disabled={isTxPending || isConfirming || isUploading || isNotMarketMaker}
                             >
-                              {safeTx.isPending || isConfirming || isUploading ? (
+                              {isTxPending || isConfirming || isUploading ? (
                                 <>
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                   {isUploading ? "Saving market data…" : "Creating prediction…"}
                                 </>
+                              ) : isNotMarketMaker ? (
+                                "Access Restricted"
                               ) : (
                                 "Create This Prediction →"
                               )}
@@ -605,32 +676,31 @@ export default function CreateCondition() {
         )}
       </div>
 
+      <GasEstimationModal
+        open={showGasModal}
+        onOpenChange={(open) => { if (!open) setShowGasModal(false); }}
+        onSubmit={handleGasConfirm}
+        submitLabel="Confirm & Create Prediction"
+        gasEstimate={gasEstimate}
+        transactionDetails={{
+          title: "Create Bitcoin Prediction",
+          description: `Will Bitcoin difficulty exceed ${parseFloat(thresholdT || "0").toFixed(2)}T at block ${parseInt(blockHeight, 10).toLocaleString()}?`,
+          items: [
+            { label: "Network", value: "Base Sepolia (Testnet)" },
+            { label: "Function", value: "createConditionWithMetadata()" },
+            { label: "Outcomes", value: "2 (YES / NO)" },
+          ],
+        }}
+      />
+
       <TransactionOverlay
         isOpen={showTransactionOverlay}
         status={txStatus as any}
         txHash={txHash}
         onClose={() => setShowTransactionOverlay(false)}
         onRetry={() => {
-          if (metadataURI) {
-            safeTx.mutateAsync({
-              txs: [{
-                to: CONTRACTS.Diamond,
-                data: encodeFunctionData({
-                  abi: DIAMOND_ABI,
-                  functionName: "createConditionWithMetadata",
-                  args: [
-                    QuestionType.DifficultyThreshold,
-                    encodeAbiParameters(
-                      [{ type: "uint256" }, { type: "uint256" }],
-                      [thresholdRaw!, BigInt(parseInt(blockHeight, 10))],
-                    ),
-                    outcomeSlotCount,
-                    metadataURI,
-                    keccak256(toHex(questionId)),
-                  ],
-                }),
-              }],
-            }).then(setTxHash).catch((err) => toast.error(friendlyError(err)));
+          if (metadataURI && conditionSalt) {
+            handleGasConfirm();
           } else {
             handleSubmit({ preventDefault: () => {} } as React.FormEvent);
           }

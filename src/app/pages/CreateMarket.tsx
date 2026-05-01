@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Button } from "../components/ui/button";
 import {
   Select,
@@ -156,6 +156,7 @@ export default function CreateMarket() {
   const [selectedToken, setSelectedToken] = useState<ApiToken | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const handledReceiptRef = useRef<string | undefined>(undefined);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [splitResult, setSplitResult] = useState<{
     conditionId: string;
@@ -189,6 +190,8 @@ export default function CreateMarket() {
 
   useEffect(() => {
     if (isSplitSuccess && receipt && selectedCondition && selectedToken) {
+      if (handledReceiptRef.current === receipt.transactionHash) return;
+      handledReceiptRef.current = receipt.transactionHash;
       const condId = selectedCondition.condition_id;
       if (!condId.startsWith("0x") || condId.length !== 66) {
         toast.error("Invalid condition ID format");

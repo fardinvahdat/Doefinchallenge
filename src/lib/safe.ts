@@ -192,23 +192,68 @@ export const createSafeClient = async (
           transactions: txsWithHandler.map(toMetaTxData),
         });
         const signed = await sdk.signTransaction(safeTx);
-        const result = await sdk.executeTransaction(signed);
+
+        // Simulate each inner tx from the Safe's address to get accurate gas,
+        // then add execTransaction overhead and a 30% buffer.
+        const SAFE_EXEC_OVERHEAD = 80_000n;
+        const FALLBACK_PER_TX = 300_000n;
+        let innerGas = 0n;
+        for (const tx of txsWithHandler) {
+          try {
+            const hexGas = await eip1193.request({
+              method: "eth_estimateGas",
+              params: [{
+                from: safeAddress,
+                to: tx.to,
+                data: tx.data,
+                value: `0x${(tx.value ?? 0n).toString(16)}`,
+              }],
+            }) as string;
+            innerGas += BigInt(hexGas);
+          } catch {
+            innerGas += FALLBACK_PER_TX;
+          }
+        }
+        const gasLimit = ((innerGas + SAFE_EXEC_OVERHEAD) * 13n) / 10n;
+
+        const result = await sdk.executeTransaction(signed, { gasLimit });
         return result.hash as Hex;
       }
 
-      // Undeployed: bundle proxy deployment + user txs into one EOA transaction.
+      // Undeployed: build the full deployment batch, then simulate it directly
+      // (from the EOA) to get the real gas cost before sending.
       const safeTx = await predictedSdk.createTransaction({
         transactions: txsWithHandler.map(toMetaTxData),
       });
       const signed = await predictedSdk.signTransaction(safeTx);
       const wrapped =
         await predictedSdk.wrapSafeTransactionIntoDeploymentBatch(signed);
+
+      let deployGas: bigint;
+      try {
+        const hexGas = await eip1193.request({
+          method: "eth_estimateGas",
+          params: [{
+            from: eoa,
+            to: wrapped.to,
+            data: wrapped.data,
+            value: `0x${BigInt(wrapped.value).toString(16)}`,
+          }],
+        }) as string;
+        deployGas = (BigInt(hexGas) * 13n) / 10n; // 30% buffer on simulation result
+      } catch {
+        // Fallback: known-cost ceiling (proxy deploy ~250K + 300K per inner tx)
+        deployGas =
+          ((285_000n + BigInt(txsWithHandler.length) * 300_000n) * 13n) / 10n;
+      }
+
       return walletClient.sendTransaction({
         account: eoa,
         chain: walletClient.chain ?? null,
         to: wrapped.to as `0x${string}`,
         value: BigInt(wrapped.value),
         data: wrapped.data as Hex,
+        gas: deployGas,
       });
     },
   };

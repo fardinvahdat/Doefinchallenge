@@ -112,25 +112,27 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
           // BINARY_PARTITION for splitPosition (from useSplitPosition)
           const BINARY_PARTITION = [1n, 2n] as const;
 
-          // Simulate the splitPosition contract call
-          const { request } = await publicClient.simulateContract({
+          const splitArgs = [
+            collateralToken,
+            zeroHash,
+            conditionId,
+            BINARY_PARTITION,
+            amount,
+          ] as const;
+
+          await publicClient.simulateContract({
             address: CONTRACTS.Diamond,
             abi: DIAMOND_ABI,
             functionName: "splitPosition",
-            args: [
-              collateralToken,
-              zeroHash, // parentCollectionId
-              conditionId,
-              BINARY_PARTITION,
-              amount,
-            ],
+            args: splitArgs,
             account: address,
           });
 
-          // If simulation succeeds, estimate gas
-          const gas = await publicClient.estimateGas({
-            to: CONTRACTS.Diamond,
-            data: (request as any).data,
+          const gas = await publicClient.estimateContractGas({
+            address: CONTRACTS.Diamond,
+            abi: DIAMOND_ABI,
+            functionName: "splitPosition",
+            args: splitArgs,
             account: address,
           });
 
@@ -171,7 +173,6 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
             return;
           }
 
-          // Encode metadata using ABI encoding
           const metadata = encodeAbiParameters(
             [{ type: "uint256" }, { type: "uint256" }],
             [threshold, blockHeight],
@@ -227,25 +228,29 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
             // Condition doesn't exist (will throw if not found)
           }
 
-          // Simulate the contract call
-          const { request } = await publicClient.simulateContract({
+          const contractCallArgs = [
+            questionType,
+            metadata,
+            Number(outcomeSlotCount),
+            metadataURI || "",
+            salt,
+          ] as const;
+
+          // Simulate first to surface custom errors (NotMarketMaker, already exists…)
+          await publicClient.simulateContract({
             address: CONTRACTS.Diamond,
             abi: DIAMOND_ABI,
             functionName: "createConditionWithMetadata",
-            args: [
-              questionType, // uint8
-              metadata, // bytes
-              Number(outcomeSlotCount), // uint8
-              metadataURI || "", // string
-              salt, // bytes32
-            ],
+            args: contractCallArgs,
             account: address,
           });
 
-          // If simulation succeeds, estimate gas
-          const gas = await publicClient.estimateGas({
-            to: CONTRACTS.Diamond,
-            data: (request as any).data,
+          // Estimate gas for the actual call (simulateContract.request.data is undefined)
+          const gas = await publicClient.estimateContractGas({
+            address: CONTRACTS.Diamond,
+            abi: DIAMOND_ABI,
+            functionName: "createConditionWithMetadata",
+            args: contractCallArgs,
             account: address,
           });
 
@@ -312,9 +317,7 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
             return;
           }
 
-          // Condition doesn't exist, proceed with estimation
-          // First, simulate the contract call to check if it would succeed
-          const { request } = await publicClient.simulateContract({
+          await publicClient.simulateContract({
             address: CONTRACTS.ConditionalTokens,
             abi: CONDITIONAL_TOKENS_ABI,
             functionName: "prepareCondition",
@@ -322,10 +325,11 @@ export function useGasEstimate(props: UseGasEstimateProps): GasEstimate {
             account: address,
           });
 
-          // If simulation succeeds, estimate gas
-          const gas = await publicClient.estimateGas({
-            to: CONTRACTS.ConditionalTokens,
-            data: (request as any).data,
+          const gas = await publicClient.estimateContractGas({
+            address: CONTRACTS.ConditionalTokens,
+            abi: CONDITIONAL_TOKENS_ABI,
+            functionName: "prepareCondition",
+            args: [oracle, questionId, outcomeSlotCount],
             account: address,
           });
 
