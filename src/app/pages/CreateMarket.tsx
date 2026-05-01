@@ -36,6 +36,7 @@ import { useScwBalances } from "../../hooks/useScwBalances";
 import { useTokens, type ApiToken } from "../../hooks/useTokens";
 import {
   useConditions,
+  useInvalidateConditions,
   parseQuestionString,
   type ApiCondition,
 } from "../../hooks/useConditions";
@@ -138,6 +139,7 @@ export default function CreateMarket() {
 
   const { tokens, isLoading: tokensLoading } = useTokens();
   const { conditions, isLoading: conditionsLoading } = useConditions("active");
+  const invalidateConditions = useInvalidateConditions();
   const { difficulty: bitcoinDifficulty } = useBitcoinDifficulty();
   const { height: bitcoinBlockHeight } = useBitcoinBlockHeight();
   const publicClient = usePublicClient();
@@ -221,6 +223,7 @@ export default function CreateMarket() {
           toast.success("Position split successfully!");
           setShowSuccessModal(true);
           refetchBalance();
+          invalidateConditions();
         })
         .catch(() => {
           setSplitResult({
@@ -231,6 +234,7 @@ export default function CreateMarket() {
           toast.success("Position split successfully!");
           setShowSuccessModal(true);
           refetchBalance();
+          invalidateConditions();
         });
     }
   }, [
@@ -240,6 +244,7 @@ export default function CreateMarket() {
     selectedToken,
     publicClient,
     refetchBalance,
+    invalidateConditions,
   ]);
 
   useEffect(() => {

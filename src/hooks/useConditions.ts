@@ -64,7 +64,10 @@ export function useConditions(status: ConditionStatus = "active") {
 
 export function useInvalidateConditions() {
   const queryClient = useQueryClient();
-  return () => queryClient.invalidateQueries({ queryKey: ["conditions"] });
+  return async () => {
+    await queryClient.invalidateQueries({ queryKey: ["conditions"] });
+    await queryClient.refetchQueries({ queryKey: ["conditions"], type: "all" });
+  };
 }
 
 // Parse threshold (in T) and blockHeight from a question_string.
