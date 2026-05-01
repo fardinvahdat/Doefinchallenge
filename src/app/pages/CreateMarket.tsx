@@ -455,10 +455,10 @@ export default function CreateMarket() {
                     <SelectTrigger className="bg-elevated border-border text-text-primary">
                       <SelectValue placeholder="Select an active condition" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="w-[var(--radix-select-trigger-width)]">
                       {conditions.map((c) => (
                         <SelectItem key={c.condition_id} value={c.condition_id}>
-                          <span className="font-medium line-clamp-2">
+                          <span className="font-medium ">
                             {c.question_string || "Unknown prediction"}
                           </span>
                         </SelectItem>
