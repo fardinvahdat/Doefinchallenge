@@ -70,8 +70,8 @@ export function useScwBalances() {
 
   const forceRefresh = async () => {
     if (!scw) return;
-    const fresh = await fetchBalances(scw);
-    queryClient.setQueryData(QUERY_KEY(scw), fresh);
+    await queryClient.invalidateQueries({ queryKey: QUERY_KEY(scw) });
+    await queryClient.refetchQueries({ queryKey: QUERY_KEY(scw), type: "all" });
   };
 
   return { ...query, forceRefresh };

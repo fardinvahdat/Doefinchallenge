@@ -85,6 +85,10 @@ function VaultContent({
 }) {
   const [tab, setTab] = useState<Tab>("deposit");
   const [txInFlight, setTxInFlight] = useState(false);
+  const [eoaRefreshing, setEoaRefreshing] = useState(false);
+  const [scwRefreshing, setScwRefreshing] = useState(false);
+  const successCalledRef = useRef(false);
+  const eoaSnapshotRef = useRef<bigint | undefined>(undefined);
   const { tokens, isLoading: tokensLoading } = useTokens();
   const [selectedToken, setSelectedToken] = useState<ApiToken | null>(null);
   const scwBalances = useScwBalances();
@@ -95,12 +99,48 @@ function VaultContent({
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: eoa ? [eoa] : undefined,
-    query: { enabled: !!eoa && !!selectedToken },
+    query: { enabled: !!eoa && !!selectedToken, staleTime: 0 },
   });
   const eoaBalance = eoaRaw as bigint | undefined;
 
-  const handleSuccess = useCallback(async () => {
-    await Promise.all([scwBalances.forceRefresh(), refetchEoa()]);
+  // Snapshot pre-tx balance so we can detect when it actually changes
+  useEffect(() => {
+    if (txInFlight) eoaSnapshotRef.current = eoaBalance;
+  }, [txInFlight]);
+
+  // Poll refetchEoa every 2s while skeleton is active; clear when balance changes
+  useEffect(() => {
+    if (!eoaRefreshing) return;
+    const poll = setInterval(() => { refetchEoa(); }, 2000);
+    const fallback = setTimeout(() => setEoaRefreshing(false), 15_000);
+    return () => { clearInterval(poll); clearTimeout(fallback); };
+  }, [eoaRefreshing, refetchEoa]);
+
+  // Detect the moment eoaBalance actually differs from the snapshot
+  useEffect(() => {
+    if (!eoaRefreshing) return;
+    if (eoaBalance !== undefined && eoaBalance !== eoaSnapshotRef.current) {
+      setEoaRefreshing(false);
+    }
+  }, [eoaBalance, eoaRefreshing]);
+
+  const handleInFlightChange = useCallback((inFlight: boolean) => {
+    setTxInFlight(inFlight);
+    if (inFlight) {
+      successCalledRef.current = false;
+      setEoaRefreshing(true);
+      setScwRefreshing(true);
+    } else if (!successCalledRef.current) {
+      // rejected or timed out — clear both immediately
+      setEoaRefreshing(false);
+      setScwRefreshing(false);
+    }
+  }, []);
+
+  const handleSuccess = useCallback(() => {
+    successCalledRef.current = true;
+    refetchEoa(); // kick off immediately; polling+snapshot effects handle the rest
+    scwBalances.forceRefresh().finally(() => setScwRefreshing(false));
   }, [scwBalances, refetchEoa]);
 
   useEffect(() => {
@@ -154,7 +194,8 @@ function VaultContent({
           token={selectedToken}
           eoaBalance={eoaBalance}
           scwBalances={scwBalances}
-          txInFlight={txInFlight}
+          eoaRefreshing={eoaRefreshing}
+          scwRefreshing={scwRefreshing}
         />
       )}
 
@@ -187,7 +228,7 @@ function VaultContent({
             scwAddress={scwAddress}
             eoaBalance={eoaBalance}
             onSuccess={handleSuccess}
-            onInFlightChange={setTxInFlight}
+            onInFlightChange={handleInFlightChange}
             onClose={onClose}
           />
         ) : (
@@ -195,7 +236,7 @@ function VaultContent({
             token={selectedToken}
             scwBalances={scwBalances}
             onSuccess={handleSuccess}
-            onInFlightChange={setTxInFlight}
+            onInFlightChange={handleInFlightChange}
             onClose={onClose}
           />
         )
@@ -211,12 +252,14 @@ function BalancesRow({
   token,
   eoaBalance,
   scwBalances,
-  txInFlight,
+  eoaRefreshing,
+  scwRefreshing,
 }: {
   token: ApiToken;
   eoaBalance: bigint | undefined;
   scwBalances: ReturnType<typeof useScwBalances>;
-  txInFlight: boolean;
+  eoaRefreshing: boolean;
+  scwRefreshing: boolean;
 }) {
   const eoaDisplay = eoaBalance !== undefined
     ? parseFloat(formatUnits(eoaBalance, token.decimals)).toFixed(4)
@@ -227,13 +270,11 @@ function BalancesRow({
     ? parseFloat(formatUnits(scwAvailable, token.decimals)).toFixed(4)
     : null;
 
-  const showSkeleton = txInFlight || scwBalances.isFetching;
-
   return (
     <div className="grid grid-cols-2 gap-2 text-sm">
       <div className="p-3 bg-surface rounded-lg border border-border">
         <p className="text-xs text-text-tertiary mb-1.5">Wallet</p>
-        {showSkeleton ? (
+        {eoaRefreshing ? (
           <Skeleton className="h-5 w-20" />
         ) : (
           <p className="font-semibold text-text-primary leading-none">
@@ -243,7 +284,7 @@ function BalancesRow({
       </div>
       <div className="p-3 bg-surface rounded-lg border border-primary/30">
         <p className="text-xs text-text-tertiary mb-1.5">Vault</p>
-        {showSkeleton ? (
+        {scwRefreshing || scwBalances.isFetching ? (
           <Skeleton className="h-5 w-20" />
         ) : (
           <p className="font-semibold text-primary leading-none">
@@ -269,7 +310,7 @@ function DepositPanel({
   eoa: `0x${string}` | undefined;
   scwAddress: `0x${string}` | undefined;
   eoaBalance: bigint | undefined;
-  onSuccess: () => Promise<void>;
+  onSuccess: () => void;
   onInFlightChange: (v: boolean) => void;
   onClose: () => void;
 }) {
@@ -306,7 +347,8 @@ function DepositPanel({
     if (pendingToastId.current) { toast.dismiss(pendingToastId.current); pendingToastId.current = null; }
     if (isSuccess) {
       toast.success(`Deposited ${submittedLabel.current} to vault`);
-      onSuccess().then(() => { deposit.reset(); });
+      onSuccess();
+      deposit.reset();
     } else {
       toast.error("Deposit transaction reverted — please try again");
       deposit.reset();
@@ -405,7 +447,7 @@ function WithdrawPanel({
 }: {
   token: ApiToken;
   scwBalances: ReturnType<typeof useScwBalances>;
-  onSuccess: () => Promise<void>;
+  onSuccess: () => void;
   onInFlightChange: (v: boolean) => void;
   onClose: () => void;
 }) {
@@ -441,7 +483,8 @@ function WithdrawPanel({
     if (pendingToastId.current) { toast.dismiss(pendingToastId.current); pendingToastId.current = null; }
     if (isSuccess) {
       toast.success(`Withdrew ${submittedLabel.current} to wallet`);
-      onSuccess().then(() => { withdraw.reset(); });
+      onSuccess();
+      withdraw.reset();
     } else {
       toast.error("Withdrawal transaction reverted — please try again");
       withdraw.reset();
