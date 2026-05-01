@@ -42,6 +42,7 @@
     "@radix-ui/react-toggle-group": "1.1.2",
     "@radix-ui/react-tooltip": "1.1.8",
     "@rainbow-me/rainbowkit": "^2.2.10",
+    "@safe-global/protocol-kit": "^7.1.0",
     "@tanstack/react-query": "^5.90.21",
     "@walletconnect/ethereum-provider": "^2.23.5",
     "class-variance-authority": "0.7.1",

@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router";
 import { Menu, X, Plus, BarChart3, Layers, Cpu } from "lucide-react";
 import { Button } from "./ui/button";
 import { WalletConnect } from "./WalletConnect";
+import { VaultMenu } from "./VaultMenu";
 
 export function Navigation() {
   const location = useLocation();
@@ -75,9 +76,10 @@ export function Navigation() {
               ))}
             </div>
 
-            {/* Right: wallet + hamburger */}
+            {/* Right: vault + wallet + hamburger */}
             <div className="flex items-center gap-2">
-              <div className="md:flex hidden">
+              <div className="md:flex hidden items-center gap-2">
+                <VaultMenu />
                 <WalletConnect />
               </div>
               <button
@@ -174,10 +176,10 @@ export function Navigation() {
 
         {/* Bottom safe-area padding */}
         <div
-          className="flex-shrink-0 px-4 py-3 border-t border-border text-xs text-text-tertiary"
+          className="flex-shrink-0 px-4 py-3 border-t border-border space-y-2"
           style={{ paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}
         >
-          <p className="mb-2 font-medium uppercase tracking-wider">Network</p>
+          <VaultMenu />
           <WalletConnect />
         </div>
       </div>

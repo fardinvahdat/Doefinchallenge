@@ -1,18 +1,25 @@
 import { Address } from "viem";
 
-// Contract addresses on Base Sepolia
+// Contract addresses on Base Sepolia.
+// Token addresses are NOT stored here — use useTokens() which fetches from GET /v3/tokens/.
 export const CONTRACTS = {
   ConditionalTokens: (import.meta.env.VITE_CONDITIONAL_TOKENS_ADDRESS ||
     "0x3F84bEf67EA2B582a3d0a4f6f6B15776F12342c9") as Address,
   Diamond: (import.meta.env.VITE_DIAMOND_ADDRESS ||
     "0xb05a5f3272F83BB748CcDA59c71Ac197dfA60F17") as Address,
-  mBTC: (import.meta.env.VITE_MBTC_ADDRESS ||
-    "0x324c4A1e28760bCC45cDE980D36A78C971653228") as Address,
-  mUSDC: (import.meta.env.VITE_MUSDC_ADDRESS ||
-    "0xa8401F4983bD79e17CfF0899504E84cebd2dB8ba") as Address,
 } as const;
 
 export const ERC20_ABI = [
+  {
+    inputs: [
+      { name: "to", type: "address" },
+      { name: "amount", type: "uint256" },
+    ],
+    name: "transfer",
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
   {
     inputs: [
       { name: "spender", type: "address" },

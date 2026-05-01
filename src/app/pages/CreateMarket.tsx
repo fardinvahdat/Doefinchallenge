@@ -9,7 +9,7 @@ import {
 } from "../components/ui/select";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Loader2, Check, ExternalLink } from "lucide-react";
+import { Loader2, Check, ExternalLink, Info } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -20,22 +20,19 @@ import {
 } from "../components/ui/dialog";
 import { useNavigate, useSearchParams } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
-import { GasEstimationModal } from "../components/GasEstimationModal";
 import { StrikePreview } from "../components/StrikePreview";
 import { CopyableHash } from "../components/CopyableHash";
 import { WalletConnect } from "../components/WalletConnect";
 import {
   useAccount,
-  useChainId,
-  useReadContract,
   usePublicClient,
 } from "wagmi";
 import {
   useSplitPosition,
   parseSplitPositionReceipt,
 } from "../../hooks/useSplitPosition";
-import { useTokenApproval } from "../../hooks/useTokenApproval";
-import { useGasEstimate } from "../../hooks/useGasEstimate";
+import { useScw } from "../../hooks/useScw";
+import { useScwBalances } from "../../hooks/useScwBalances";
 import { useTokens, type ApiToken } from "../../hooks/useTokens";
 import {
   useConditions,
@@ -44,34 +41,27 @@ import {
 } from "../../hooks/useConditions";
 import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
 import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
-import { CONTRACTS, ERC20_ABI } from "../../config/contracts";
+import { CONTRACTS } from "../../config/contracts";
 import { Address, parseUnits, formatUnits } from "viem";
 import NetworkMonitor from "../components/NetworkMonitor";
 import { friendlyError } from "../../utils/friendlyError";
 
-// TokenCard is a separate component so useReadContract doesn't violate rules of hooks
+// TokenCard shows the SCW's available balance from the backend (total − locked).
 function TokenCard({
   token,
   selected,
-  walletAddress,
+  balances,
   onSelect,
 }: {
   token: ApiToken;
   selected: boolean;
-  walletAddress: Address | undefined;
+  balances: ReturnType<typeof useScwBalances>;
   onSelect: (token: ApiToken) => void;
 }) {
-  const { data: balanceRaw } = useReadContract({
-    address: token.address,
-    abi: ERC20_ABI,
-    functionName: "balanceOf",
-    args: walletAddress ? [walletAddress] : undefined,
-    query: { enabled: !!walletAddress },
-  });
-
+  const available = balances.data?.getAvailable(token.address);
   const displayBalance =
-    balanceRaw !== undefined
-      ? parseFloat(formatUnits(balanceRaw as bigint, token.decimals)).toFixed(4)
+    available !== undefined
+      ? parseFloat(formatUnits(available, token.decimals)).toFixed(4)
       : null;
 
   return (
@@ -124,7 +114,6 @@ function TokenCard({
   );
 }
 
-// Derive selected condition info for display / StrikePreview
 function useSelectedConditionInfo(condition: ApiCondition | null) {
   return useMemo(() => {
     if (!condition) return null;
@@ -144,17 +133,18 @@ export default function CreateMarket() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { address, isConnected } = useAccount();
-  const currentChain = useChainId();
+  const { data: scwInfo } = useScw();
+  const scwAddress = scwInfo?.scw as Address | undefined;
 
   const { tokens, isLoading: tokensLoading } = useTokens();
   const { conditions, isLoading: conditionsLoading } = useConditions("active");
   const { difficulty: bitcoinDifficulty } = useBitcoinDifficulty();
   const { height: bitcoinBlockHeight } = useBitcoinBlockHeight();
+  const publicClient = usePublicClient();
 
   const [selectedCondition, setSelectedCondition] =
     useState<ApiCondition | null>(null);
 
-  // Pre-select condition from URL param (e.g. from "Participate" button on Markets page)
   useEffect(() => {
     const conditionId = searchParams.get("conditionId");
     if (conditionId && conditions.length > 0 && !selectedCondition) {
@@ -162,10 +152,10 @@ export default function CreateMarket() {
       if (match) setSelectedCondition(match);
     }
   }, [searchParams, conditions, selectedCondition]);
+
   const [selectedToken, setSelectedToken] = useState<ApiToken | null>(null);
   const [amount, setAmount] = useState("");
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showGasModal, setShowGasModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [splitResult, setSplitResult] = useState<{
     conditionId: string;
@@ -175,49 +165,17 @@ export default function CreateMarket() {
 
   const conditionInfo = useSelectedConditionInfo(selectedCondition);
 
-  // Collateral balance for selected token
-  const { data: collateralBalanceRaw, refetch: refetchBalance } =
-    useReadContract({
-      address: selectedToken?.address,
-      abi: ERC20_ABI,
-      functionName: "balanceOf",
-      args: address ? [address] : undefined,
-      query: { enabled: !!address && !!selectedToken },
-    });
-
+  // Collateral balance — GET /v3/balances/{scw}?refresh=true → available (= total − locked)
+  const scwBalances = useScwBalances();
   const tokenDecimals = selectedToken?.decimals ?? 18;
+  const availableRaw = selectedToken
+    ? scwBalances.data?.getAvailable(selectedToken.address)
+    : undefined;
   const collateralBalance =
-    collateralBalanceRaw !== undefined
-      ? { value: collateralBalanceRaw as bigint, decimals: tokenDecimals }
+    availableRaw !== undefined
+      ? { value: availableRaw, decimals: tokenDecimals }
       : null;
-
-  // Required approval amount in token units — used to check if existing allowance covers the split
-  const requiredApprovalAmount = useMemo(() => {
-    if (!selectedToken || !amount) return undefined;
-    try {
-      return parseUnits(amount, selectedToken.decimals);
-    } catch {
-      return undefined;
-    }
-  }, [selectedToken, amount]);
-
-  // Token approval — spender is always the Diamond; no fallback when no token selected
-  const {
-    isApproved,
-    approve,
-    isPending: isApproving,
-    isConfirming: isApprovingConfirming,
-    isSuccess: isApproveSuccess,
-    refetch: refetchAllowance,
-    error: approveError,
-  } = useTokenApproval(
-    selectedToken?.address, // undefined when nothing selected — hook stays disabled
-    CONTRACTS.Diamond,
-    address,
-    requiredApprovalAmount,
-  );
-
-  const publicClient = usePublicClient();
+  const refetchBalance = scwBalances.forceRefresh;
 
   const {
     splitPosition,
@@ -229,50 +187,8 @@ export default function CreateMarket() {
     receipt,
   } = useSplitPosition();
 
-  // Gas estimation — amount in token-native units (consistent with split call)
-  const canEstimateGas = Boolean(
-    isConnected &&
-    address &&
-    selectedToken?.address &&
-    selectedCondition?.condition_id &&
-    amount,
-  );
-  const amountInContractUnits =
-    canEstimateGas && amount
-      ? (() => {
-          try {
-            return parseUnits(amount, tokenDecimals);
-          } catch {
-            return undefined;
-          }
-        })()
-      : undefined;
-
-  const gasEstimate = useGasEstimate({
-    enabled: canEstimateGas,
-    splitPosition: {
-      collateralToken: selectedToken?.address,
-      conditionId: selectedCondition?.condition_id as Address | undefined,
-      amount: amountInContractUnits,
-    },
-  });
-
-  useEffect(() => {
-    if (isApproveSuccess) {
-      toast.success("Approval successful!");
-      refetchAllowance();
-    }
-  }, [isApproveSuccess, refetchAllowance]);
-
-  useEffect(() => {
-    if (approveError) {
-      toast.error(friendlyError(approveError));
-    }
-  }, [approveError]);
-
   useEffect(() => {
     if (isSplitSuccess && receipt && selectedCondition && selectedToken) {
-      // Validate condition_id format before using it as bytes32
       const condId = selectedCondition.condition_id;
       if (!condId.startsWith("0x") || condId.length !== 66) {
         toast.error("Invalid condition ID format");
@@ -329,26 +245,12 @@ export default function CreateMarket() {
     }
   }, [splitError]);
 
-  const handleApprove = async () => {
-    if (!selectedToken) return;
-    try {
-      await approve();
-    } catch (err) {
-      toast.error(friendlyError(err));
-    }
-  };
-
-  const handleSplitPosition = async () => {
+  const handleSplit = async () => {
     if (!selectedCondition || !selectedToken || !amount || !collateralBalance) {
       toast.error("Please complete all fields");
       return;
     }
-    if (!isApproved) {
-      toast.error("Please approve collateral first");
-      return;
-    }
 
-    // Use token-native decimals consistently
     let amountParsed: bigint;
     try {
       amountParsed = parseUnits(amount, selectedToken.decimals);
@@ -362,26 +264,19 @@ export default function CreateMarket() {
       return;
     }
     if (collateralBalance.value < amountParsed) {
-      toast.error("Insufficient collateral balance");
+      toast.error("Insufficient collateral balance in your Safe wallet");
       return;
     }
-    setShowGasModal(true);
-  };
 
-  const handleConfirmSplitPosition = async () => {
-    if (!selectedCondition || !selectedToken || !amount || !collateralBalance)
-      return;
     try {
-      setShowGasModal(false);
       await splitPosition({
         collateralToken: selectedToken.address,
         conditionId: selectedCondition.condition_id as `0x${string}`,
-        amount: parseUnits(amount, selectedToken.decimals),
+        amount: amountParsed,
+        includeApproval: true,
       });
     } catch (err) {
-      toast.error(
-        `Transaction failed: ${err instanceof Error ? err.message : "Unknown error"}`,
-      );
+      toast.error(friendlyError(err));
     }
   };
 
@@ -393,21 +288,13 @@ export default function CreateMarket() {
     }
   };
 
-  // Matches CreateCondition pattern: default "idle", overlay shown when not idle
   const txStatus = useMemo(() => {
-    if (isApproving || isApprovingConfirming) return "awaiting";
-    if (isSplitting || isSplitConfirming) return "confirming";
+    if (isSplitting) return "awaiting";
+    if (isSplitConfirming) return "confirming";
     if (isSplitSuccess) return "confirmed";
     if (splitError) return "failed";
     return "idle";
-  }, [
-    isApproving,
-    isApprovingConfirming,
-    isSplitting,
-    isSplitConfirming,
-    isSplitSuccess,
-    splitError,
-  ]);
+  }, [isSplitting, isSplitConfirming, isSplitSuccess, splitError]);
 
   useEffect(() => {
     setShowTransactionOverlay(txStatus !== "idle");
@@ -441,12 +328,19 @@ export default function CreateMarket() {
           <div className="space-y-8">
             <NetworkMonitor />
 
-            {/* CM-04: Two-transaction flow warning */}
-            <div className="p-4 bg-accent/5 border border-accent/30 rounded-xl text-sm text-text-secondary">
-              <span className="font-semibold text-accent">Heads up:</span> You
-              will be asked to sign 2 wallet transactions — first to approve
-              token spending, then to get your YES/NO tokens.
-            </div>
+            {/* SCW info banner */}
+            {scwAddress && (
+              <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl flex items-start gap-3 text-sm">
+                <Info className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                <div className="space-y-1 min-w-0">
+                  <p className="text-text-primary font-medium">Your Safe Wallet</p>
+                  <p className="text-text-secondary text-xs">
+                    Tokens are held and split from your Safe smart contract wallet. Send {selectedToken?.symbol ?? "collateral"} here before splitting.
+                  </p>
+                  <CopyableHash hash={scwAddress} className="text-xs" />
+                </div>
+              </div>
+            )}
 
             {/* Step 1: Select Condition */}
             <div className="bg-surface border border-border rounded-xl p-2 md:p-6">
@@ -498,7 +392,7 @@ export default function CreateMarket() {
                     <SelectContent className="w-[var(--radix-select-trigger-width)]">
                       {conditions.map((c) => (
                         <SelectItem key={c.condition_id} value={c.condition_id}>
-                          <span className="font-medium ">
+                          <span className="font-medium">
                             {c.question_string || "Unknown prediction"}
                           </span>
                         </SelectItem>
@@ -506,7 +400,6 @@ export default function CreateMarket() {
                     </SelectContent>
                   </Select>
 
-                  {/* Selected condition with StrikePreview */}
                   {selectedCondition && conditionInfo && (
                     <StrikePreview
                       thresholdT={conditionInfo.thresholdT}
@@ -552,7 +445,7 @@ export default function CreateMarket() {
                       key={token.address}
                       token={token}
                       selected={selectedToken?.address === token.address}
-                      walletAddress={address}
+                      balances={scwBalances}
                       onSelect={setSelectedToken}
                     />
                   ))}
@@ -575,7 +468,6 @@ export default function CreateMarket() {
               </div>
 
               <div className="max-w-xl space-y-6">
-                {/* Amount Input */}
                 <div className="space-y-2">
                   <Label htmlFor="amount" className="text-text-primary">
                     Amount
@@ -613,7 +505,7 @@ export default function CreateMarket() {
                   </div>
                   {collateralBalance && (
                     <p className="text-xs text-text-tertiary">
-                      Available:{" "}
+                      Safe wallet balance:{" "}
                       {parseFloat(
                         formatUnits(
                           collateralBalance.value,
@@ -625,19 +517,9 @@ export default function CreateMarket() {
                   )}
                   {collateralBalance && collateralBalance.value === 0n && (
                     <p className="text-xs text-yellow-400">
-                      Your balance is zero.{" "}
-                      <a
-                        href="https://www.alchemy.com/faucets/base-sepolia"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="underline hover:text-yellow-300"
-                      >
-                        Get free test ETH →
-                      </a>{" "}
-                      then swap for {selectedToken?.symbol} on the testnet.
+                      Your Safe wallet balance is zero. Send {selectedToken?.symbol} to your Safe address above first.
                     </p>
                   )}
-                  {/* CM-05: Inline balance error */}
                   {amount &&
                     collateralBalance &&
                     parseFloat(amount) >
@@ -648,58 +530,17 @@ export default function CreateMarket() {
                         ),
                       ) && (
                       <p className="text-xs text-danger" role="alert">
-                        Amount exceeds your available balance
+                        Amount exceeds your Safe wallet balance
                       </p>
                     )}
                 </div>
 
-                {/* Approval */}
-                {selectedToken && (
-                  <div className="p-4 bg-accent/5 border border-accent/30 rounded-lg space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-text-primary">
-                          Approve {selectedToken.symbol}
-                        </p>
-                        <p className="text-xs text-text-secondary mt-1">
-                          Step 1 of 2 — Allow the smart contract to use your{" "}
-                          {selectedToken.symbol}
-                        </p>
-                      </div>
-                      {isApproved && (
-                        <div className="flex items-center gap-1 text-success">
-                          <Check className="h-4 w-4" />
-                          <span className="text-sm font-medium">Approved</span>
-                        </div>
-                      )}
-                    </div>
-                    {!isApproved && (
-                      <Button
-                        onClick={handleApprove}
-                        disabled={isApproving || isApprovingConfirming}
-                        className="w-full bg-accent hover:bg-accent/90 text-accent-foreground"
-                      >
-                        {isApproving || isApprovingConfirming ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Approving...
-                          </>
-                        ) : (
-                          `Approve ${selectedToken.symbol}`
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                )}
-
-                {/* Split Button */}
                 <Button
-                  onClick={handleSplitPosition}
+                  onClick={handleSplit}
                   disabled={
                     !selectedCondition ||
                     !selectedToken ||
                     !amount ||
-                    !isApproved ||
                     isSplitting ||
                     isSplitConfirming ||
                     (!!amount &&
@@ -724,7 +565,6 @@ export default function CreateMarket() {
                   )}
                 </Button>
 
-                {/* Summary */}
                 {selectedCondition && selectedToken && amount && (
                   <div className="p-4 bg-elevated border border-border rounded-lg space-y-3 text-sm">
                     <div className="flex justify-between">
@@ -739,7 +579,6 @@ export default function CreateMarket() {
                         {amount} YES + {amount} NO tokens
                       </span>
                     </div>
-                    {/* CM-06: YES/NO explanation */}
                     <details className="group pt-1 border-t border-border">
                       <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
                         What are YES/NO tokens? ›
@@ -777,10 +616,9 @@ export default function CreateMarket() {
         status={txStatus as any}
         txHash={splitHash}
         onClose={() => setShowTransactionOverlay(false)}
-        onRetry={() => handleSplitPosition()}
+        onRetry={() => handleSplit()}
       />
 
-      {/* Success Modal */}
       <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
         <DialogContent className="bg-elevated border-border max-w-md">
           <DialogHeader>
@@ -838,30 +676,6 @@ export default function CreateMarket() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <GasEstimationModal
-        open={showGasModal}
-        onOpenChange={setShowGasModal}
-        gasEstimate={gasEstimate}
-        onSubmit={handleConfirmSplitPosition}
-        transactionDetails={{
-          title: "Split Position",
-          description:
-            "Split your collateral into YES/NO position tokens on the Diamond contract",
-          items: [
-            { label: "Contract", value: "Diamond" },
-            { label: "Function", value: "splitPosition()" },
-            {
-              label: "Condition",
-              value: selectedCondition
-                ? `${selectedCondition.condition_id.slice(0, 10)}...`
-                : "-",
-            },
-            { label: "Collateral", value: selectedToken?.symbol || "-" },
-            { label: "Amount", value: amount || "-" },
-          ],
-        }}
-      />
     </div>
   );
 }

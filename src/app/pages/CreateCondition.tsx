@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
-import { Loader2, ExternalLink, AlertTriangle, Info, Check } from "lucide-react";
+import { Loader2, ExternalLink, AlertTriangle, Check } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -14,30 +14,20 @@ import {
 import { useNavigate } from "react-router";
 import { TransactionOverlay } from "../components/TransactionOverlay";
 import { CopyableHash } from "../components/CopyableHash";
-import { GasEstimationModal } from "../components/GasEstimationModal";
 import { StrikePreview } from "../components/StrikePreview";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { useAccount, useWaitForTransactionReceipt } from "wagmi";
 import { useWeb3 } from "../contexts/Web3Context";
 import { useBitcoinBlockHeight } from "../../hooks/useBitcoinBlockHeight";
 import { useBitcoinDifficulty } from "../../hooks/useBitcoinDifficulty";
-import { useGasEstimate } from "../../hooks/useGasEstimate";
 import { useInvalidateConditions } from "../../hooks/useConditions";
-import { keccak256, toHex, encodeAbiParameters } from "viem";
+import { useSafeTx } from "../../hooks/useSafeTx";
+import { keccak256, toHex, encodeAbiParameters, encodeFunctionData, type Hex } from "viem";
 import { CONTRACTS, DIAMOND_ABI } from "../../config/contracts";
 import { parseConditionCreationEvent } from "../../utils/conditionEventParser";
 import { uploadFileToFilebase } from "../../utils/filebase";
 import { friendlyError } from "../../utils/friendlyError";
 import NetworkMonitor from "../components/NetworkMonitor";
 import { WalletConnect } from "../components/WalletConnect";
-import {
-  Tooltip,
-  TooltipTrigger,
-  TooltipContent,
-} from "../components/ui/tooltip";
 
 enum QuestionType {
   DifficultyThreshold = 0,
@@ -69,38 +59,29 @@ export default function CreateCondition() {
     difficulty: bitcoinDifficulty,
     formatted: bitcoinDifficultyFormatted,
     loading: difficultyLoading,
-    error: difficultyError,
   } = useBitcoinDifficulty();
 
-  const {
-    writeContract,
-    data: hash,
-    isPending,
-    error: writeError,
-  } = useWriteContract();
+  const safeTx = useSafeTx();
+  const [txHash, setTxHash] = useState<Hex | undefined>(undefined);
   const {
     isLoading: isConfirming,
     isSuccess,
     data: receipt,
-  } = useWaitForTransactionReceipt({ hash });
+  } = useWaitForTransactionReceipt({ hash: txHash });
 
   const [thresholdT, setThresholdT] = useState("");
   const [blockHeight, setBlockHeight] = useState("");
   const [metadataURI, setMetadataURI] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [showGasModal, setShowGasModal] = useState(false);
   const [showTransactionOverlay, setShowTransactionOverlay] = useState(false);
   const [conditionId, setConditionId] = useState<`0x${string}` | "">("");
   const [resolvedQuestionId, setResolvedQuestionId] = useState<`0x${string}` | "">(
     "",
   );
-  // Track whether conditionId in the success modal is a fallback (event parse failed)
   const [conditionIdIsFallback, setConditionIdIsFallback] = useState(false);
-  // Captured display values for the success modal (set before form reset)
   const [capturedQuestion, setCapturedQuestion] = useState("");
 
-  const currentBlockNumber = currentBlock ? Number(currentBlock) : 0;
   const outcomeSlotCount = 2;
   const contractsConfigured =
     CONTRACTS.Diamond !== "0x0000000000000000000000000000000000000000";
@@ -118,29 +99,9 @@ export default function CreateCondition() {
     return keccak256(encoded);
   }, [thresholdRaw, blockHeight]);
 
-  const canEstimateGas = Boolean(
-    contractsConfigured &&
-      isConnected &&
-      address &&
-      thresholdRaw &&
-      blockHeight &&
-      questionId,
-  );
-
-  const gasEstimate = useGasEstimate({
-    enabled: canEstimateGas,
-    diamond: CONTRACTS.Diamond,   // #6: was incorrectly passing wallet address
-    questionType: QuestionType.DifficultyThreshold,
-    threshold: thresholdRaw ?? 0n,
-    blockHeight: blockHeight ? BigInt(parseInt(blockHeight, 10)) : 0n,
-    outcomeSlotCount: BigInt(outcomeSlotCount),
-    metadataURI,
-    salt: questionId ? keccak256(toHex(questionId)) : undefined,
-  });
-
   // Transaction success — parse event, show modal, invalidate cache
   useEffect(() => {
-    if (isSuccess && receipt && hash && address && questionId) {
+    if (isSuccess && receipt && txHash && address && questionId) {
       let eventConditionId: string = questionId;
       let eventQuestionId: string = questionId;
       let isFallback = false;
@@ -150,14 +111,12 @@ export default function CreateCondition() {
         eventConditionId = eventData.conditionId;
         eventQuestionId = eventData.questionId;
       } catch {
-        // Event parse failed — fallback to questionId, warn in modal (#20)
         isFallback = true;
       }
 
       setConditionId(eventConditionId as `0x${string}`);
       setResolvedQuestionId(eventQuestionId as `0x${string}`);
       setConditionIdIsFallback(isFallback);
-      // Capture the question text before the form resets (#37)
       const blockNum = parseInt(blockHeight, 10);
       setCapturedQuestion(
         `Will Bitcoin difficulty exceed ${parseFloat(thresholdT).toFixed(2)}T at block ${blockNum.toLocaleString()}?`
@@ -166,13 +125,13 @@ export default function CreateCondition() {
       toast.success("Condition created successfully!");
       invalidateConditions();
     }
-  }, [isSuccess, receipt, hash, address, questionId, invalidateConditions]);
+  }, [isSuccess, receipt, txHash, address, questionId, invalidateConditions]);
 
   useEffect(() => {
-    if (writeError) {
-      toast.error(friendlyError(writeError));
+    if (safeTx.error) {
+      toast.error(friendlyError(safeTx.error));
     }
-  }, [writeError]);
+  }, [safeTx.error]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,56 +181,51 @@ export default function CreateCondition() {
         type: "application/json",
       });
       const result = await uploadFileToFilebase(jsonFile);
-      setMetadataURI(result.url);
-      setShowGasModal(true);
-    } catch (error) {
-      toast.error(
-        "Failed to upload metadata to IPFS: " + (error as Error).message,
+      const ipfsUrl = result.url;
+      setMetadataURI(ipfsUrl);
+      setIsUploading(false);
+
+      const metadata = encodeAbiParameters(
+        [{ type: "uint256" }, { type: "uint256" }],
+        [thresholdRaw, BigInt(blockNum)],
       );
+      const salt = keccak256(toHex(questionId));
+      const hash = await safeTx.mutateAsync({
+        txs: [{
+          to: CONTRACTS.Diamond,
+          data: encodeFunctionData({
+            abi: DIAMOND_ABI,
+            functionName: "createConditionWithMetadata",
+            args: [
+              QuestionType.DifficultyThreshold,
+              metadata,
+              outcomeSlotCount,
+              ipfsUrl,
+              salt,
+            ],
+          }),
+        }],
+      });
+      setTxHash(hash);
+    } catch (err) {
+      toast.error(friendlyError(err));
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleConfirmTransaction = async () => {
-    if (!address || !questionId || !thresholdRaw || !blockHeight) return;
-    try {
-      setShowGasModal(false);
-      const metadata = encodeAbiParameters(
-        [{ type: "uint256" }, { type: "uint256" }],
-        [thresholdRaw, BigInt(parseInt(blockHeight, 10))],
-      );
-      const salt = keccak256(toHex(questionId));
-      await writeContract({
-        address: CONTRACTS.Diamond,
-        abi: DIAMOND_ABI,
-        functionName: "createConditionWithMetadata",
-        args: [
-          QuestionType.DifficultyThreshold,
-          metadata,
-          outcomeSlotCount,
-          metadataURI || "",
-          salt,
-        ],
-      });
-    } catch (err) {
-      toast.error(friendlyError(err));
-    }
-  };
-
   const txStatus = useMemo(() => {
-    if (isPending) return "awaiting";
+    if (safeTx.isPending || isUploading) return "awaiting";
     if (isConfirming) return "confirming";
     if (isSuccess) return "confirmed";
-    if (writeError) return "failed";
+    if (safeTx.error) return "failed";
     return "idle";
-  }, [isPending, isConfirming, isSuccess, writeError]);
+  }, [safeTx.isPending, isUploading, isConfirming, isSuccess, safeTx.error]);
 
   useEffect(() => {
     setShowTransactionOverlay(txStatus !== "idle");
   }, [txStatus]);
 
-  // Reset form after successful submission so a second condition can be created
   useEffect(() => {
     if (isSuccess) {
       setThresholdT("");
@@ -432,7 +386,6 @@ export default function CreateCondition() {
                               Pick how far in the future:
                             </p>
 
-                            {/* Big quick-pick buttons */}
                             {bitcoinBlockHeight > 0 && (
                               <div className="grid grid-cols-3 gap-3">
                                 {presets.map(({ label, blocks }) => {
@@ -490,7 +443,6 @@ export default function CreateCondition() {
                               </div>
                             )}
 
-                            {/* Manual override */}
                             <details>
                               <summary className="text-base transition-colors delay-100 cursor-pointer hover:text-text-secondary list-none">
                                 Enter a specific Bitcoin block number instead ›
@@ -533,7 +485,6 @@ export default function CreateCondition() {
                               </div>
                             </details>
 
-                            {/* Estimated date callout */}
                             {estDate && (
                               <div className="flex items-center gap-2 p-3 bg-success/8 border border-success/20 rounded-lg">
                                 <Check className="h-4 w-4 text-success shrink-0" />
@@ -584,7 +535,6 @@ export default function CreateCondition() {
 
                         {bothDone && (
                           <div className="space-y-4">
-                            {/* Plain-English summary */}
                             <div className="p-4 bg-primary/5 border border-primary/25 rounded-lg">
                               <p className="text-xs text-text-tertiary mb-1 uppercase tracking-wide font-medium">Your prediction</p>
                               <p className="text-base text-text-primary font-medium leading-snug">
@@ -614,9 +564,9 @@ export default function CreateCondition() {
                             <Button
                               type="submit"
                               className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
-                              disabled={isPending || isConfirming || isUploading}
+                              disabled={safeTx.isPending || isConfirming || isUploading}
                             >
-                              {isPending || isConfirming || isUploading ? (
+                              {safeTx.isPending || isConfirming || isUploading ? (
                                 <>
                                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                                   {isUploading ? "Saving market data…" : "Creating prediction…"}
@@ -648,12 +598,29 @@ export default function CreateCondition() {
       <TransactionOverlay
         isOpen={showTransactionOverlay}
         status={txStatus as any}
-        txHash={hash}
+        txHash={txHash}
         onClose={() => setShowTransactionOverlay(false)}
         onRetry={() => {
-          // #36: if IPFS already uploaded, skip re-upload and go straight to gas modal
           if (metadataURI) {
-            setShowGasModal(true);
+            safeTx.mutateAsync({
+              txs: [{
+                to: CONTRACTS.Diamond,
+                data: encodeFunctionData({
+                  abi: DIAMOND_ABI,
+                  functionName: "createConditionWithMetadata",
+                  args: [
+                    QuestionType.DifficultyThreshold,
+                    encodeAbiParameters(
+                      [{ type: "uint256" }, { type: "uint256" }],
+                      [thresholdRaw!, BigInt(parseInt(blockHeight, 10))],
+                    ),
+                    outcomeSlotCount,
+                    metadataURI,
+                    keccak256(toHex(questionId)),
+                  ],
+                }),
+              }],
+            }).then(setTxHash).catch((err) => toast.error(friendlyError(err)));
           } else {
             handleSubmit({ preventDefault: () => {} } as React.FormEvent);
           }
@@ -671,13 +638,11 @@ export default function CreateCondition() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* Human-readable summary */}
             <div className="p-4 bg-primary/5 border border-primary/30 rounded-lg">
               <p className="text-xs text-text-secondary mb-1">Your prediction</p>
               <p className="text-sm font-medium text-text-primary">{capturedQuestion}</p>
             </div>
 
-            {/* What's next */}
             <div className="p-4 bg-success/5 border border-success/30 rounded-lg space-y-1">
               <p className="text-xs font-semibold text-success">What's next?</p>
               <p className="text-xs text-text-secondary">
@@ -685,7 +650,6 @@ export default function CreateCondition() {
               </p>
             </div>
 
-            {/* Technical details — collapsed by default */}
             <details className="group">
               <summary className="text-xs text-text-tertiary cursor-pointer hover:text-text-secondary list-none">
                 Technical details ›
@@ -704,13 +668,13 @@ export default function CreateCondition() {
                   <Label className="text-text-secondary text-xs">Question ID</Label>
                   <CopyableHash hash={resolvedQuestionId} />
                 </div>
-                {hash && (
+                {txHash && (
                   <div className="space-y-1">
                     <Label className="text-text-secondary text-xs">Transaction</Label>
                     <div className="flex items-center gap-2">
-                      <CopyableHash hash={hash} />
+                      <CopyableHash hash={txHash} />
                       <a
-                        href={`https://sepolia.basescan.org/tx/${hash}`}
+                        href={`https://sepolia.basescan.org/tx/${txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-primary hover:underline flex items-center gap-1"
@@ -743,13 +707,6 @@ export default function CreateCondition() {
           </div>
         </DialogContent>
       </Dialog>
-
-      <GasEstimationModal
-        open={showGasModal}
-        onOpenChange={setShowGasModal}
-        gasEstimate={gasEstimate}
-        onSubmit={handleConfirmTransaction}
-      />
     </div>
   );
 }

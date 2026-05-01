@@ -1,16 +1,20 @@
-import {
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useAccount,
-  usePublicClient,
-} from "wagmi";
+import { useState } from "react";
+import { useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import {
   Address,
   parseEventLogs,
   zeroHash,
   TransactionReceipt,
+  encodeFunctionData,
+  maxUint256,
+  type Hex,
 } from "viem";
-import { CONTRACTS, DIAMOND_ABI } from "../config/contracts";
+import { CONTRACTS, DIAMOND_ABI, ERC20_ABI } from "../config/contracts";
+import { useSafeTx } from "./useSafeTx";
+
+export const PARTITION_YES = 1n;
+export const PARTITION_NO = 2n;
+export const BINARY_PARTITION = [PARTITION_YES, PARTITION_NO] as const;
 
 function toBytes32Hex(value: string | bigint | Address): Address {
   if (!value) throw new Error("Value is required");
@@ -32,10 +36,6 @@ export interface SplitPositionResult {
   collateralToken: Address;
   amount: bigint;
 }
-
-export const PARTITION_YES = 1n;
-export const PARTITION_NO = 2n;
-export const BINARY_PARTITION = [PARTITION_YES, PARTITION_NO] as const;
 
 export async function parseSplitPositionReceipt(
   receipt: TransactionReceipt,
@@ -67,7 +67,6 @@ export async function parseSplitPositionReceipt(
   const amount = event.args.amount as bigint;
   const parentCollectionId = zeroHash;
 
-  // Fetch both collection IDs in parallel (#19)
   const [yesCollectionId, noCollectionId] = await Promise.all([
     publicClient.readContract({
       address: diamondAddress,
@@ -83,7 +82,6 @@ export async function parseSplitPositionReceipt(
     }),
   ]);
 
-  // Fetch both position IDs in parallel (#19)
   const [yesPositionId, noPositionId] = await Promise.all([
     publicClient.readContract({
       address: diamondAddress,
@@ -152,56 +150,61 @@ export async function calculatePositionIds(
 }
 
 export function useSplitPosition() {
-  const { address: userAddress } = useAccount();
+  const safeTx = useSafeTx();
   const publicClient = usePublicClient();
+  const [hash, setHash] = useState<Hex | undefined>(undefined);
 
-  const { writeContract, data: hash, isPending, error } = useWriteContract();
-  const {
-    isLoading: isConfirming,
-    isSuccess,
-    data: receipt,
-  } = useWaitForTransactionReceipt({ hash });
+  const { isLoading: isConfirming, isSuccess, data: receipt } =
+    useWaitForTransactionReceipt({ hash });
 
   const splitPosition = async ({
     collateralToken,
     conditionId,
     amount,
+    includeApproval = false,
   }: {
     collateralToken: Address;
-    conditionId: Address;
+    conditionId: `0x${string}`;
     amount: bigint;
+    includeApproval?: boolean;
   }) => {
-    if (!userAddress) throw new Error("Wallet not connected");
-    if (!collateralToken || !conditionId || !amount)
-      throw new Error("Missing required parameters");
     if (!publicClient) throw new Error("Public client not available");
 
     const conditionIdHex = toBytes32Hex(conditionId);
+    const txs = [];
 
-    const isCollateralAllowed = await publicClient.readContract({
-      address: CONTRACTS.Diamond,
-      abi: DIAMOND_ABI,
-      functionName: "isAllowedCollateral",
-      args: [collateralToken],
-    });
-    if (!isCollateralAllowed) {
-      throw new Error("Collateral token is not allowed by this Diamond");
+    if (includeApproval) {
+      txs.push({
+        to: collateralToken,
+        data: encodeFunctionData({
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [CONTRACTS.Diamond, maxUint256],
+        }),
+      });
     }
 
-    // #14: removed hardcoded gas: 5_000_000 — let the wallet estimate gas
-    return writeContract({
-      address: CONTRACTS.Diamond,
-      abi: DIAMOND_ABI,
-      functionName: "splitPosition",
-      args: [
-        collateralToken,
-        zeroHash,
-        conditionIdHex,
-        BINARY_PARTITION,
-        amount,
-      ],
+    txs.push({
+      to: CONTRACTS.Diamond,
+      data: encodeFunctionData({
+        abi: DIAMOND_ABI,
+        functionName: "splitPosition",
+        args: [collateralToken, zeroHash, conditionIdHex, BINARY_PARTITION, amount],
+      }),
     });
+
+    const txHash = await safeTx.mutateAsync({ txs });
+    setHash(txHash);
+    return txHash;
   };
 
-  return { splitPosition, hash, isPending, isConfirming, isSuccess, error, receipt };
+  return {
+    splitPosition,
+    hash,
+    isPending: safeTx.isPending,
+    isConfirming,
+    isSuccess,
+    error: safeTx.error,
+    receipt,
+  };
 }
