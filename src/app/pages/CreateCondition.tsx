@@ -71,6 +71,7 @@ export default function CreateCondition() {
 
   const [thresholdT, setThresholdT] = useState("");
   const [blockHeight, setBlockHeight] = useState("");
+  const [blockInputOpen, setBlockInputOpen] = useState(true);
   const [metadataURI, setMetadataURI] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -443,47 +444,56 @@ export default function CreateCondition() {
                               </div>
                             )}
 
-                            <details>
-                              <summary className="text-base transition-colors delay-100 cursor-pointer hover:text-text-secondary list-none">
-                                Enter a specific Bitcoin block number instead ›
-                              </summary>
-                              <div className="mt-2 space-y-2">
-                                <Input
-                                  id="blockHeight"
-                                  type="number"
-                                  placeholder={
-                                    bitcoinBlockHeight > 0
-                                      ? (bitcoinBlockHeight + 2016).toString()
-                                      : "940000"
-                                  }
-                                  value={blockHeight}
-                                  onChange={(e) =>
-                                    setBlockHeight(e.target.value)
-                                  }
-                                  className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
-                                  style={
-                                    bitcoinBlockHeight > 0 &&
-                                    [2016, 4320, 12960].some(
-                                      (b) =>
-                                        blockHeight ===
-                                        (bitcoinBlockHeight + b).toString(),
-                                    )
-                                      ? { borderColor: "var(--primary)" }
-                                      : undefined
-                                  }
-                                  aria-describedby="blockheight-helper"
-                                />
-                                {!bitcoinLoading && bitcoinBlockHeight > 0 && (
-                                  <p
-                                    id="blockheight-helper"
-                                    className="text-xs text-text-tertiary"
-                                  >
-                                    Current Bitcoin block: ~
-                                    {bitcoinBlockHeight.toLocaleString()}
-                                  </p>
-                                )}
+                            <div>
+                              <button
+                                type="button"
+                                onClick={() => setBlockInputOpen((v) => !v)}
+                                className="text-base transition-colors delay-100 cursor-pointer hover:text-text-secondary flex items-center gap-1"
+                              >
+                                Enter a specific Bitcoin block number instead
+                                <span className={`inline-block transition-transform duration-200 ${blockInputOpen ? "rotate-90" : ""}`}>›</span>
+                              </button>
+                              <div className={`grid transition-all duration-300 ease-in-out ${blockInputOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+                                <div className="overflow-hidden">
+                                  <div className="mt-2 space-y-2">
+                                    <Input
+                                      id="blockHeight"
+                                      type="number"
+                                      placeholder={
+                                        bitcoinBlockHeight > 0
+                                          ? (bitcoinBlockHeight + 2016).toString()
+                                          : "940000"
+                                      }
+                                      value={blockHeight}
+                                      onChange={(e) =>
+                                        setBlockHeight(e.target.value)
+                                      }
+                                      className="bg-elevated text-text-primary focus:ring-primary focus:border-primary border-border"
+                                      style={
+                                        bitcoinBlockHeight > 0 &&
+                                        [2016, 4320, 12960].some(
+                                          (b) =>
+                                            blockHeight ===
+                                            (bitcoinBlockHeight + b).toString(),
+                                        )
+                                          ? { borderColor: "var(--primary)" }
+                                          : undefined
+                                      }
+                                      aria-describedby="blockheight-helper"
+                                    />
+                                    {!bitcoinLoading && bitcoinBlockHeight > 0 && (
+                                      <p
+                                        id="blockheight-helper"
+                                        className="text-xs text-text-tertiary"
+                                      >
+                                        Current Bitcoin block: ~
+                                        {bitcoinBlockHeight.toLocaleString()}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </details>
+                            </div>
 
                             {estDate && (
                               <div className="flex items-center gap-2 p-3 bg-success/8 border border-success/20 rounded-lg">
